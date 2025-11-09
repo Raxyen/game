@@ -1,13 +1,14 @@
 #include <iostream>
 #include <vector>
+#include <cmath>
 #include <algorithm>
 #include <cstdlib>
 #include <conio.h>
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
-#include <ctime>
-#include <cmath>
+#include <time.h>
+#include <thread>
 
 const int MAP_HEIGHT = 15;
 const int MAP_WIDTH = 30;
@@ -98,6 +99,36 @@ void menu() {
     wcout << L"╚═══╩═══════════════════╝\n";
 }
 
+// sound
+
+void playEnemyHitSound() { thread([] { Beep(300, 50); }).detach(); }
+
+void playEnemyKilledSound() {
+    thread([] {
+        Beep(300, 50);
+        Beep(400, 50);
+        }).detach();
+}
+
+void playBulletSound() { 
+    thread([] { 
+        for (int i = 2000; i > 1700; i -= 30) {
+            Beep(i, 15);
+        }
+        }).detach(); 
+}
+
+void playRocketSound() { thread([] { Beep(60, 1000); }).detach(); }
+
+void playPowerUpPickedSound() {
+    thread([] {
+        Beep(300, 50);
+        Beep(400, 50);
+        Beep(300, 50);
+        Beep(400, 50);
+        }).detach();
+}
+
 // general game functions
 
 void resetPlayerStats(Player& player, vector<Bullet>& bullets, vector<Enemy>& enemies) {
@@ -173,7 +204,15 @@ void moveBullet(vector<Bullet>& bullets) { // moves bullet one field per tick
             else if (bullet.direction == 'a' && bullet.pos.x > 0) bullet.pos.x -= 1.0f;
             else if (bullet.direction == 's' && bullet.pos.y < MAP_HEIGHT - 1) bullet.pos.y += 1.0f;
             else if (bullet.direction == 'd' && bullet.pos.x < MAP_WIDTH - 1) bullet.pos.x += 1.0f;
-            else bullet.isActive = false;
+            bullets.erase(
+                remove_if(bullets.begin(), bullets.end(), [](Bullet& b) {
+                    return (
+                        b.pos.x < 0 || b.pos.x >= MAP_WIDTH ||
+                        b.pos.y < 0 || b.pos.y >= MAP_HEIGHT
+                        );
+                    }),
+                bullets.end()
+            );
         }
     }
 }
@@ -562,6 +601,7 @@ int main() {
                         }
                         else {
                             createBullet(player, bullets, enemies, false); // shoot a bullet
+                            thread(playBulletSound).detach();
                             player.bullets--;
                             player.bullets_fired++;
                         }
@@ -572,6 +612,7 @@ int main() {
                         }
                         else {
                             createRocket(player, rocket); // shoot a rocket
+                            thread(playRocketSound).detach();
                             player.rockets--;
                             player.rockets_fired++;
                         }
@@ -584,6 +625,7 @@ int main() {
                 // iterate enemies vector
                 for (auto& enemy : enemies) {
                     if (checkPlayerBulletAndEnemyCollision(enemy, bullets)) {
+                        thread(playEnemyHitSound).detach();
                         enemy.isHit = true;
                         enemy.hp -= 30;
                         player.score += 10;
@@ -591,10 +633,12 @@ int main() {
                             data.powerup_spawn_condition = true;
                     }
                     if (checkPlayerRocketAndEnemyCollision(enemy, rocket)) {
+                        thread(playEnemyHitSound).detach();
                         rocket.isActive = false;
                         enemy.hp = 0;
                     }
                     if (enemy.hp <= 0) {
+                        thread(playEnemyKilledSound).detach();
                         enemy.bullet.isActive = false;
                         player.score += 50;
                         player.kills++;
@@ -629,6 +673,7 @@ int main() {
                 // iterate powerups vector
                 for (auto it = powerups.begin(); it != powerups.end();) {
                     if (checkPlayerAndPowerUpCollision(player, *it)) {
+                        thread(playPowerUpPickedSound).detach();
                         if (it->type == 0) {
                             player.hp += 20;
                         }
