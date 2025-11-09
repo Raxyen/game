@@ -1,11 +1,13 @@
 #include <iostream>
 #include <vector>
+#include <algorithm>
 #include <cstdlib>
 #include <conio.h>
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
-#include <time.h>
+#include <ctime>
+#include <cmath>
 
 const int MAP_HEIGHT = 15;
 const int MAP_WIDTH = 30;
