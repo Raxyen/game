@@ -1,62 +1,284 @@
 #include <iostream>
 #include <vector>
-#include <cmath>
+#include <array>
 #include <algorithm>
+#include <thread>
 #include <cstdlib>
+#include <cmath>
+#include <ctime>
 #include <conio.h>
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
-#include <time.h>
-#include <thread>
 
 const int MAP_HEIGHT = 15;
 const int MAP_WIDTH = 30;
 
 using namespace std;
 
-struct Position {
+// sound
+
+void playEnemyHitSound() { thread([] { Beep(300, 50); }).detach(); }
+
+void playEnemyKilledSound() {
+    thread([] {
+        Beep(300, 50);
+        Beep(400, 50);
+        }).detach();
+}
+
+void playBulletSound() {
+    thread([] {
+        Beep(1000, 30);
+        }).detach();
+}
+
+void playRocketSound() { thread([] { Beep(60, 1000); }).detach(); }
+
+void playPowerUpPickedSound() {
+    thread([] {
+        Beep(400, 50);
+        Beep(500, 50);
+        Beep(400, 50);
+        Beep(500, 50);
+        }).detach();
+}
+
+class Position {
+private:
     float x, y;
+public:
+    Position() : x(0), y(0) {} // default
+    Position(float p_x, float p_y) : x(p_x), y(p_y) {}
+
+    inline float getX() { return x; }
+    inline float getY() { return y; }
+    inline void moveX(float dx) { this->x += dx; }
+    inline void moveY(float dy) { this->y += dy; }
+
+    Position& operator=(const Position& other) {
+        if (this != &other) {
+            this->x = other.x;
+            this->y = other.y;
+        }
+        return *this;
+    }
 };
 
-struct Player {
-    Position pos = { 0,0 };
-    char facing = ' ';
-    int hp = 100;
-    unsigned int kills = 0;
-    unsigned int score = 0;
-    unsigned int bullets = 0;
-    unsigned int rockets = 0;
-    unsigned int bullets_fired = 0;
-    unsigned int rockets_fired = 0;
-    int cause_of_death = 0;
+class Projectile {
+protected:
+    Position pos;
+    unsigned int damage;
+    float speed;
+    bool is_enemy;
+    bool is_active;
+    char direction;
+public:
+    Projectile() {} // default
+    Projectile(Position p_pos, unsigned int p_damage, float p_speed, bool p_is_enemy, char p_direction)
+        : pos(p_pos), damage(p_damage), speed(p_speed), is_enemy(p_is_enemy), direction(p_direction), is_active(true) {}
+
+    inline Position getPosition() { return pos; }
+    inline void setPosition(Position pos) { this->pos = pos; }
+
+    inline char getDirection() { return direction; }
+
+    void activate() { is_active = true; }
+    void deactivate() { is_active = false; }
+
+    bool isActive() { return is_active; }
+    bool isEnemy() { return is_enemy; }
+
+    unsigned int getDamage() { return this->damage; }
+
+    void move() { // moves projectile
+        if (this->is_active) {
+            if (direction == 'w' && pos.getY() > 0) pos.moveY(-speed);
+            else if (direction == 'a' && pos.getX() > 0) pos.moveX(-speed);
+            else if (direction == 's' && pos.getY() < MAP_HEIGHT - 1) pos.moveY(speed);
+            else if (direction == 'd' && pos.getX() < MAP_WIDTH - 1) pos.moveX(speed);
+            else deactivate();
+        }
+    }
 };
 
-struct Bullet {
-    Position pos = { 0,0 };
-    bool is_enemy = false;
-    bool isActive = false;
-    char direction = ' ';
+class Bullet : public Projectile {
+public:
+    Bullet() = default;
+
+    Bullet(Position p_pos, unsigned int p_damage, bool p_is_enemy, char p_direction)
+        : Projectile(p_pos, p_damage, 1.0f, p_is_enemy, p_direction) {}
 };
 
-struct Enemy {
-    Position pos = { 0,0 };
+class Rocket : public Projectile {
+public:
+    Rocket(Position p_pos, unsigned int p_damage, bool p_is_enemy, char p_direction)
+        : Projectile(p_pos, p_damage, 0.7f, p_is_enemy, p_direction) {}
+};
+
+class Player {
+private:
+    Position pos;
+    vector<Bullet> bullets;
+    char direction;
+    int hp;
+    unsigned int kills;
+    unsigned int score;
+    unsigned int bullets_count;
+    unsigned int rockets_count;
+    unsigned int bullets_fired;
+    unsigned int rockets_fired;
+    int cause_of_death;
+public:
+    Player() { reset(); }
+
+    inline Position getPosition() { return pos; }
+    inline void setPosition(Position pos) { this->pos = pos; }
+    
+    inline vector<Bullet>& getBullets() { return bullets; }
+    inline const vector<Bullet>& getBullets() const { return bullets; }
+
+    inline char getDirection() { return direction; }
+    inline void setDirection(char direction) { this->direction = direction; }
+
+    inline int getHP() { return hp; }
+
+    inline unsigned int getBulletsCount() { return bullets_count; }
+    inline unsigned int getRocketsCount() { return rockets_count; }
+
+    inline void setCauseOfDeath(int cause) { this->cause_of_death = cause; }
+
+    void modifyHealth(int health) { this->hp += health; }
+    void modifyScore(int score) { this->score += score; }
+
+    void modifyBulletsCount(int bullets_count) { this->bullets_count += bullets_count; }
+    void modifyRocketsCount(int rockets_count) { this->rockets_count += rockets_count; }
+
+    void modifyRocketsFired(int rockets_fired) { this->rockets_fired += rockets_fired; }
+
+    void kill() { kills++; }
+
+    void normalizeHP() { if (hp > 100) hp = 100; }
+
+    void move(float dx, float dy) {
+        pos.moveX(dx);
+        pos.moveY(dy);
+    }
+
+    void shoot() {
+        Bullet bullet(getPosition(), 30, false, getDirection());
+        bullets.emplace_back(bullet);
+        bullets_count--;
+        bullets_fired++;
+        thread(playBulletSound).detach();
+    }
+
+    void reset() {
+        direction = 'w';
+        kills = 0;
+        score = 0;
+        hp = 100;
+        bullets_count = 30;
+        rockets_count = 2;
+        bullets_fired = 0;
+        rockets_fired = 0;
+        cause_of_death = 0;
+        setPosition(Position(10.0f, 5.0f));
+    }
+
+    void info() {
+        wcout << "Enemy kills: " << kills << endl;
+        wcout << "Bullets fired: " << bullets_fired << endl;
+        wcout << "Bullets: " << bullets_count << endl;
+        wcout << "Missiles fired: " << rockets_fired << endl;
+        wcout << "Missiles: " << rockets_count << endl;
+        wcout << "Score: " << score << endl;
+        wcout << "Health: ";
+    }
+
+    void finalInfo() {
+        wcout << "  * Score: " << score << "\n  * Enemy kills: " << kills << L"\n  * Killed by: ";
+        cause_of_death == 1 ? wcout << L"Enemy crashing you\n\n" : wcout << L"Enemy bullet\n\n";
+        wcout << L"   Press any key to proceed to the menu.\n";
+    }
+};
+
+class Enemy {
+private:
+    Position pos;
     Bullet bullet;
-    bool isHit = false;
-    char direction = ' ';
-    int hp = 100;
+    float speed;
+    char texture;
+    bool is_hit;
+    char direction;
+    int hp;
+public:
+    Enemy(char p_direction, Player& player) :
+        is_hit(false), direction(p_direction), hp(100), speed(0.2f), texture('X') {
+        unsigned int x = rand() % (MAP_WIDTH - 2) + 1;
+        unsigned int y = rand() % (MAP_HEIGHT - 2) + 1;
+        if (x != player.getPosition().getX() && y != player.getPosition().getY()) {
+            pos = Position(x, y);
+        }
+        else {
+            pos = Position(x + rand() % 3 - 2, y + rand() % 3 - 2);
+        }
+        bullet = Bullet(getPosition(), 20, true, ' ');
+        bullet.deactivate();
+    }
+
+    inline Position getPosition() { return pos; }
+    inline Bullet& getBullet() { return bullet; }
+    inline const Bullet& getBullet() const { return bullet; }
+    inline void setBullet(Bullet bullet) { this->bullet = bullet; }
+    inline float getSpeed() { return speed; }
+    inline int getHP() { return hp; }
+    inline char getTexture() { return texture; }
+
+    bool isHit() { return is_hit; }
+    void setIsHit(bool is_hit) { this->is_hit = is_hit; }
+
+    void modifyHealth(int health) { this->hp += health; }
+
+    void move(float dx, float dy) {
+        pos.moveX(dx);
+        pos.moveY(dy);
+    }
+
+    void shoot(Player& player) {
+        float dx = player.getPosition().getX() - getPosition().getX();
+        float dy = player.getPosition().getY() - getPosition().getY();
+
+        char temp_dir;
+        if (fabs(dx) > fabs(dy))
+            temp_dir = (dx > 0) ? 'd' : 'a'; // horizontally
+        else
+            temp_dir = (dy > 0) ? 's' : 'w'; // vertically
+
+        bullet = Bullet(getPosition(), 20, true, temp_dir);
+        bullet.activate();
+    }
 };
 
-struct Rocket {
-    Position pos = { 0,0 };
-    bool isActive = false;
-    char direction = ' ';
-};
+class PowerUp {
+private:
+    Position pos;
+    int type;
+    char texture;
+public:
+    PowerUp(Player& player, int p_type) : type(p_type) {
+        texture = (type == 1) ? '*' : '$';
+        unsigned int x, y;
+        do {
+            x = rand() % (MAP_WIDTH - 2) + 1;
+            y = rand() % (MAP_HEIGHT - 2) + 1;
+        } while (x == static_cast<int>(player.getPosition().getX()) && y == static_cast<int>(player.getPosition().getY()));
+        pos = Position(static_cast<float>(x), static_cast<float>(y));
+    }
 
-struct PowerUp {
-    Position pos = { 0,0 };
-    int type = 0;
-    char texture = ' ';
+    inline Position getPosition() { return pos; }
+    inline char getTexture() { return texture; }
+    inline int getType() { return type; }
 };
 
 struct Data {
@@ -99,53 +321,17 @@ void menu() {
     wcout << L"╚═══╩═══════════════════╝\n";
 }
 
-// sound
-
-void playEnemyHitSound() { thread([] { Beep(300, 50); }).detach(); }
-
-void playEnemyKilledSound() {
-    thread([] {
-        Beep(300, 50);
-        Beep(400, 50);
-        }).detach();
-}
-
-void playBulletSound() { 
-    thread([] { 
-        for (int i = 2000; i > 1700; i -= 30) {
-            Beep(i, 15);
-        }
-        }).detach(); 
-}
-
-void playRocketSound() { thread([] { Beep(60, 1000); }).detach(); }
-
-void playPowerUpPickedSound() {
-    thread([] {
-        Beep(300, 50);
-        Beep(400, 50);
-        Beep(300, 50);
-        Beep(400, 50);
-        }).detach();
-}
-
 // general game functions
 
-void resetPlayerStats(Player& player, vector<Bullet>& bullets, vector<Enemy>& enemies) {
-    player.hp = 100;
-    player.kills = 0;
-    for (auto i : bullets) i.isActive = false;
-    Enemy enemy;
-    for (auto enemy : enemies)
-        enemy.bullet.isActive = false;
-    player.pos.x = 10.0f; // starting x position of the player
-    player.pos.y = 5.0f; // starting y position of the player
-    player.bullets = 50;
-    player.rockets = 10;
-    player.score = 0;
+void resetPlayerStats(Player& player, vector<Enemy>& enemies) {
+
+    for (auto& bullet : player.getBullets()) 
+        bullet.deactivate();
+    for (auto& enemy : enemies)
+        enemy.getBullet().deactivate();
 }
 
-void gameOver(Player& player, vector<Bullet>& bullets, vector<Enemy>& enemies, vector<PowerUp>& powerups) {
+void gameOver(Player& player, vector<Enemy>& enemies, vector<PowerUp>& powerups) {
     system("cls");
     setConsoleColor(12);
     wcout << "\n\n\n";
@@ -154,16 +340,14 @@ void gameOver(Player& player, vector<Bullet>& bullets, vector<Enemy>& enemies, v
     wcout << L"   ║          GAME OVER          ║░\n";
     wcout << L"   ║                             ║░\n";
     wcout << L"   ╚═════════════════════════════╝░\n";
-    wcout << L"    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\n\n";
-    wcout << "  * Score: " << player.score << "\n  * Enemy kills: " << player.kills << L"\n  * Killed by: ";
-    player.cause_of_death == 1 ? wcout << L"Enemy crashing you\n\n" : wcout << L"Enemy bullet\n\n";
-    wcout << L"   Press any key to proceed to the menu.\n";
+    wcout << L"    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\n\n";   
+    player.finalInfo();
     enemies.clear();
-    bullets.clear();
+    player.getBullets().clear();
     powerups.clear();
     Sleep(2000);
     _getch();
-    resetPlayerStats(player, bullets, enemies);
+    resetPlayerStats(player, enemies);
     setConsoleColor(7);
 }
 
@@ -175,99 +359,31 @@ void initMap(char map[MAP_HEIGHT][MAP_WIDTH]) { // initializes map fields
 
 // game objects manipulation 
 
-void createBullet(Player& player, vector<Bullet>& bullets, vector<Enemy>& enemies, bool is_enemy) {   
-    if (is_enemy) {
-        for (auto& enemy : enemies) {
-            enemy.bullet.isActive = true;
-            enemy.bullet.is_enemy = true;
-            enemy.bullet.pos = enemy.pos;
-            if (static_cast<int>(enemy.pos.y) > static_cast<int>(player.pos.y)) enemy.bullet.direction = 'w';
-            else if (static_cast<int>(enemy.pos.x) > static_cast<int>(player.pos.x)) enemy.bullet.direction = 'a';
-            else if (static_cast<int>(enemy.pos.y) < static_cast<int>(player.pos.y)) enemy.bullet.direction = 's';
-            else if (static_cast<int>(enemy.pos.x) < static_cast<int>(player.pos.x)) enemy.bullet.direction = 'd';
-        }
-    }
-    else {
-        Bullet bullet;
-        bullet.isActive = true;
-        bullet.is_enemy = false;
-        bullet.pos = player.pos;
-        bullet.direction = player.facing;
-        bullets.emplace_back(bullet);
-    }
-}
-
-void moveBullet(vector<Bullet>& bullets) { // moves bullet one field per tick
-    for(Bullet& bullet : bullets) {
-        if (bullet.isActive) {
-            if (bullet.direction == 'w' && bullet.pos.y > 0) bullet.pos.y -= 1.0f;
-            else if (bullet.direction == 'a' && bullet.pos.x > 0) bullet.pos.x -= 1.0f;
-            else if (bullet.direction == 's' && bullet.pos.y < MAP_HEIGHT - 1) bullet.pos.y += 1.0f;
-            else if (bullet.direction == 'd' && bullet.pos.x < MAP_WIDTH - 1) bullet.pos.x += 1.0f;
-            bullets.erase(
-                remove_if(bullets.begin(), bullets.end(), [](Bullet& b) {
-                    return (
-                        b.pos.x < 0 || b.pos.x >= MAP_WIDTH ||
-                        b.pos.y < 0 || b.pos.y >= MAP_HEIGHT
-                        );
-                    }),
-                bullets.end()
-            );
-        }
-    }
-}
-
-void moveEnemyBullet(Enemy& enemy) { // moves enemy bullet one field per tick
-    if (enemy.bullet.isActive) {
-        if (enemy.bullet.direction == 'w' && enemy.bullet.pos.y > 0) enemy.bullet.pos.y -= 0.5f;
-        else if (enemy.bullet.direction == 'a' && enemy.bullet.pos.x > 0) enemy.bullet.pos.x -= 0.5f;
-        else if (enemy.bullet.direction == 's' && enemy.bullet.pos.y < MAP_HEIGHT - 1) enemy.bullet.pos.y += 0.5f;
-        else if (enemy.bullet.direction == 'd' && enemy.bullet.pos.x < MAP_WIDTH - 1) enemy.bullet.pos.x += 0.5f;
-        else enemy.bullet.isActive = false;
-    }
-}
-
-void createEnemy(Player& player, vector<Enemy>& enemies) { // initializes enemy object
-    Enemy enemy;
-    enemy.hp = 100;
-    unsigned int rnd_x, rnd_y;
-    rnd_x = rand() % MAP_WIDTH;
-    rnd_y = rand() % MAP_HEIGHT;
-    if (rnd_x != player.pos.x && rnd_y != player.pos.y) {
-        enemy.pos.x = rnd_x;
-        enemy.pos.y = rnd_y;
-    }
-    else {
-        enemy.pos.x = rnd_x + rand() % 3 - 2;
-        enemy.pos.y = rnd_y + rand() % 3 - 2;
-    }
-    enemies.emplace_back(enemy);
-}
-
 void spawnEnemies(Player& player, vector<Enemy>& enemies, unsigned int count) {
+    array<char, 4> dir = { 'w', 'a', 's', 'd' };
     for (size_t i = 0; i < count; i++)
-        createEnemy(player, enemies);
+        enemies.emplace_back(Enemy(dir[rand() % 4], player));
 }
 
-void moveEnemy(Player& player, vector<Enemy>& enemies) {
+void moveEnemies(Player& player, vector<Enemy>& enemies) {
     bool occupied[MAP_HEIGHT][MAP_WIDTH] = { false };
 
     for (auto& e : enemies)
-        occupied[static_cast<int>(e.pos.y)][static_cast<int>(e.pos.x)] = true;
+        occupied[static_cast<int>(e.getPosition().getY())][static_cast<int>(e.getPosition().getX())] = true;
 
     // iterate every enemy
     for (auto& e : enemies) {
 
-        int oldX = static_cast<int>(e.pos.x);
-        int oldY = static_cast<int>(e.pos.y);
+        int oldX = static_cast<int>(e.getPosition().getX());
+        int oldY = static_cast<int>(e.getPosition().getY());
 
         // determine enemy direction
         int dx = 0, dy = 0;
 
-        if (fabs(player.pos.x - e.pos.x) > fabs(player.pos.y - e.pos.y))
-            dx = (player.pos.x > e.pos.x) ? 1 : -1;
+        if (fabs(player.getPosition().getX() - e.getPosition().getX()) > fabs(player.getPosition().getY() - e.getPosition().getY()))
+            dx = (player.getPosition().getX() > e.getPosition().getX()) ? 1 : -1;
         else
-            dy = (player.pos.y > e.pos.y) ? 1 : -1;
+            dy = (player.getPosition().getY() > e.getPosition().getY()) ? 1 : -1;
 
         int newX = oldX + dx;
         int newY = oldY + dy;
@@ -279,56 +395,22 @@ void moveEnemy(Player& player, vector<Enemy>& enemies) {
             occupied[newY][newX] = true;
 
             // move enemy
-            e.pos.x += dx * 0.2f;
-            e.pos.y += dy * 0.2f;
+            e.move(dx * e.getSpeed(), dy * e.getSpeed());
         }
     }
 }
 
-void createRocket(Player& player, Rocket& rocket) { // initializes rocket object when 'r' or 'R' key pressed
-    rocket.isActive = true;
-    rocket.pos = player.pos;
-    rocket.direction = player.facing;
-}
-
-void moveRocket(Rocket& rocket) { // moves bullet one field per tick
-    if (rocket.isActive) {
-        if (rocket.direction == 'w' && rocket.pos.y > 0) rocket.pos.y -= 1.0;
-        else if (rocket.direction == 'a' && rocket.pos.x > 0) rocket.pos.x -= 1.0;
-        else if (rocket.direction == 's' && rocket.pos.y < MAP_HEIGHT - 1) rocket.pos.y += 1.0;
-        else if (rocket.direction == 'd' && rocket.pos.x < MAP_WIDTH - 1) rocket.pos.x += 1.0;
-        else rocket.isActive = false;
-    }
-}
-
-void createPowerUp(Player& player, vector<PowerUp>& powerups, int type) { // initializes power_up object
-    PowerUp powerup;
-    powerup.type = type;
-    powerup.texture = (type == 1) ? '*' : '$';
-    
-    unsigned int x, y;   
-    do {
-        x = rand() % (MAP_WIDTH - 2) + 1;
-        y = rand() % (MAP_HEIGHT - 2) + 1;
-    } while (x == static_cast<int>(player.pos.x) && y == static_cast<int>(player.pos.y));
-
-    powerup.pos.x = x;
-    powerup.pos.y = y;
-
-    powerups.emplace_back(powerup);
-}
-
 // game objects collisions
 
-bool checkPlayerBulletAndEnemyCollision(Enemy& enemy, vector<Bullet>& bullets) {
-    for (Bullet& bullet : bullets) {
-        if (bullet.isActive && !bullet.is_enemy) {
-            float dx = fabs(enemy.pos.x - bullet.pos.x);
-            float dy = fabs(enemy.pos.y - bullet.pos.y);
+bool checkPlayerBulletAndEnemyCollision(Player& player, Enemy& enemy) {
+    for (Bullet& bullet : player.getBullets()) {
+        if (bullet.isActive() && !bullet.isEnemy()) {
+            float dx = fabs(enemy.getPosition().getX() - bullet.getPosition().getX());
+            float dy = fabs(enemy.getPosition().getY() - bullet.getPosition().getY());
 
             // solve tunneling problem
             if (dx < 0.6f && dy < 0.6f) {
-                bullet.isActive = false;
+                bullet.deactivate();
                 return true;
             }
         }
@@ -337,36 +419,36 @@ bool checkPlayerBulletAndEnemyCollision(Enemy& enemy, vector<Bullet>& bullets) {
 }
 
 bool checkPlayerRocketAndEnemyCollision(Enemy& enemy, Rocket& rocket) { // checks if both the coordinates of enemy and player's rocket are equal (checks collision)
-    return (rocket.isActive && static_cast<int>(enemy.pos.x) == static_cast<int>(rocket.pos.x) && static_cast<int>(enemy.pos.y) == static_cast<int>(rocket.pos.y));
+    return (rocket.isActive() && static_cast<int>(enemy.getPosition().getX()) == static_cast<int>(rocket.getPosition().getX()) && static_cast<int>(enemy.getPosition().getY()) == static_cast<int>(rocket.getPosition().getY()));
 }
 
 bool checkEnemyBulletAndPlayerCollision(Player& player, Enemy& enemy) { // checks if both the coordinates of enemy's bullet and player are equal (checks collision)
-    return (enemy.bullet.isActive && enemy.bullet.is_enemy && static_cast<int>(player.pos.x) == static_cast<int>(enemy.bullet.pos.x) && static_cast<int>(player.pos.y) == static_cast<int>(enemy.bullet.pos.y));
+    return (enemy.getBullet().isActive() && enemy.getBullet().isEnemy() && static_cast<int>(player.getPosition().getX()) == static_cast<int>(enemy.getBullet().getPosition().getX())) && static_cast<int>(player.getPosition().getY()) == static_cast<int>(enemy.getBullet().getPosition().getY());
 }
 
 bool checkPlayerAndEnemyCollision(Player& player, Enemy& enemy) { // checks if both the coordinates of enemy and player are equal (checks collision)
-    return (static_cast<int>(enemy.pos.x) == static_cast<int>(player.pos.x) && static_cast<int>(enemy.pos.y) == static_cast<int>(player.pos.y));
+    return (static_cast<int>(enemy.getPosition().getX()) == static_cast<int>(player.getPosition().getX()) && static_cast<int>(enemy.getPosition().getY()) == static_cast<int>(player.getPosition().getY()));
 }
 
 bool checkPlayerAndPowerUpCollision(Player& player, PowerUp& power_up) { // checks if both the coordinates of powerup and player are equal (checks collision)
-    return (static_cast<int>(power_up.pos.x) == static_cast<int>(player.pos.x) && static_cast<int>(power_up.pos.y) == static_cast<int>(player.pos.y));
+    return (static_cast<int>(power_up.getPosition().getX()) == static_cast<int>(player.getPosition().getX()) && static_cast<int>(power_up.getPosition().getY()) == static_cast<int>(player.getPosition().getY()));
 }
 
 //checks whether the player distance from enemy is least or equal than 14 
 //and if the player and enemy are in the same line to make a shot possible
 
 bool playerNearEnemy(Player& player, Enemy& enemy) {
-    if (static_cast<int>(player.pos.x) == static_cast<int>(enemy.pos.x) && abs(player.pos.y - enemy.pos.y) <= 14) {
+    if (static_cast<int>(player.getPosition().getX()) == static_cast<int>(enemy.getPosition().getX()) && fabs(player.getPosition().getY() - enemy.getPosition().getY()) <= 14) {
         return true; // same column
     }
-    else if (static_cast<int>(player.pos.y) == static_cast<int>(enemy.pos.y) && abs(player.pos.x - enemy.pos.x) <= 14) {
+    else if (static_cast<int>(player.getPosition().getY()) == static_cast<int>(enemy.getPosition().getY()) && fabs(player.getPosition().getX() - enemy.getPosition().getX()) <= 14) {
         return true; // same row
     }
     return false;
 }
 
 // drawing map
-void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, vector<Bullet>& bullets, Rocket& rocket, vector<Enemy>& enemies, vector<PowerUp>& powerups, Data& data) {
+void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, Rocket& rocket, vector<Enemy>& enemies, vector<PowerUp>& powerups, Data& data) {
     system("cls");
 
     setConsoleColor(7);
@@ -381,7 +463,7 @@ void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, vector<Bullet>& bu
         for (int j = 0; j < MAP_WIDTH; j++) {
             bool drawn = false; // flag to check if the element is drawn on x y
 
-            if (!drawn && i == static_cast<int>(player.pos.y) && j == static_cast<int>(player.pos.x)) {
+            if (!drawn && i == static_cast<int>(player.getPosition().getY()) && j == static_cast<int>(player.getPosition().getX())) {
                 setConsoleColor(2); // set green color for player
                 wcout << '@'; // draw player 
                 setConsoleColor(7); // reset to white color
@@ -389,11 +471,11 @@ void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, vector<Bullet>& bu
             }
 
             if (!drawn) { // draw player's bullets 
-                for (auto& bullet : bullets) {
-                    if (bullet.isActive && i == static_cast<int>(bullet.pos.y) && j == static_cast<int>(bullet.pos.x)) {
+                for (auto& bullet : player.getBullets()) {
+                    if (bullet.isActive() && i == static_cast<int>(bullet.getPosition().getY()) && j == static_cast<int>(bullet.getPosition().getX())) {
                         setConsoleColor(8); // set gray color for bullet
-                        if (bullet.direction == 'a' || bullet.direction == 'd') wcout << L"─"; // horizontal bullet
-                        else if (bullet.direction == 'w' || bullet.direction == 's') wcout << L"│"; // vertical bullet
+                        if (bullet.getDirection() == 'a' || bullet.getDirection() == 'd') wcout << L"─"; // horizontal bullet
+                        else if (bullet.getDirection() == 'w' || bullet.getDirection() == 's') wcout << L"│"; // vertical bullet
                         setConsoleColor(7); // reset to white color
                         drawn = true;
                         break;
@@ -402,12 +484,12 @@ void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, vector<Bullet>& bu
             }
 
             // draw player's rocket
-            if (!drawn && rocket.isActive && i == static_cast<int>(rocket.pos.y) && j == static_cast<int>(rocket.pos.x)) {
+            if (!drawn && rocket.isActive() && i == static_cast<int>(rocket.getPosition().getY()) && j == static_cast<int>(rocket.getPosition().getX())) {
                 setConsoleColor(8); // set gray color for rocket
-                if (rocket.direction == 'w') wcout << L"↑"; // rocket with up direction
-                else if (rocket.direction == 'a') wcout << L"←"; // rocket with left direction
-                else if (rocket.direction == 's') wcout << L"↓"; // rocket with down direction
-                else if (rocket.direction == 'd') wcout << L"→"; // rocket with right direction                
+                if (rocket.getDirection() == 'w') wcout << L"↑"; // rocket with up direction
+                else if (rocket.getDirection() == 'a') wcout << L"←"; // rocket with left direction
+                else if (rocket.getDirection() == 's') wcout << L"↓"; // rocket with down direction
+                else if (rocket.getDirection() == 'd') wcout << L"→"; // rocket with right direction                
                 setConsoleColor(7); // reset to white color
                 drawn = true;
             }
@@ -415,9 +497,9 @@ void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, vector<Bullet>& bu
             // draw enemies
             if (!drawn) {
                 for (auto& enemy : enemies) {
-                    if (i == static_cast<int>(enemy.pos.y) && j == static_cast<int>(enemy.pos.x)) {
-                        setConsoleColor(enemy.isHit ? 13 : (enemy.hp > 30 ? 4 : 6)); // set red color for enemy if enemy's hp > 30 else set yellow
-                        wcout << 'X';
+                    if (i == static_cast<int>(enemy.getPosition().getY()) && j == static_cast<int>(enemy.getPosition().getX())) {
+                        setConsoleColor(enemy.isHit() ? 13 : (enemy.getHP() > 30 ? 4 : 6)); // set red color for enemy if enemy's hp > 30 else set yellow
+                        wcout << enemy.getTexture();
                         setConsoleColor(7); // reset to white color
                         drawn = true;
                         break;
@@ -428,10 +510,10 @@ void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, vector<Bullet>& bu
             // draw enemy bullets for each enemy
             if (!drawn) {
                 for (auto& enemy : enemies) {
-                    if (enemy.bullet.isActive && i == static_cast<int>(enemy.bullet.pos.y) && j == static_cast<int>(enemy.bullet.pos.x)) { // draw enemy's bullet
+                    if (enemy.getBullet().isActive() && i == static_cast<int>(enemy.getBullet().getPosition().getY()) && j == static_cast<int>(enemy.getBullet().getPosition().getX())) { // draw enemy's bullet
                         setConsoleColor(12); // set light red color for rocket
-                        if (enemy.bullet.direction == 'a' || enemy.bullet.direction == 'd') wcout << L"─"; // horizontal bullet
-                        else if (enemy.bullet.direction == 'w' || enemy.bullet.direction == 's') wcout << L"│"; // vertical bullet
+                        if (enemy.getBullet().getDirection() == 'a' || enemy.getBullet().getDirection() == 'd') wcout << L"─"; // horizontal bullet
+                        else if (enemy.getBullet().getDirection() == 'w' || enemy.getBullet().getDirection() == 's') wcout << L"│"; // vertical bullet
                         setConsoleColor(7); // reset to white color
                         drawn = true;
                     }
@@ -441,9 +523,9 @@ void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, vector<Bullet>& bu
             // draw powerups
             if (!drawn) {
                 for (auto& powerup : powerups) {
-                    if (!drawn && i == static_cast<int>(powerup.pos.y) && j == static_cast<int>(powerup.pos.x)) {
+                    if (!drawn && i == static_cast<int>(powerup.getPosition().getY()) && j == static_cast<int>(powerup.getPosition().getX())) {
                         setConsoleColor(9);  // set blue color for powerup
-                        wcout << powerup.texture;
+                        wcout << powerup.getTexture();
                         setConsoleColor(7); // reset to white color
                         drawn = true;
                     }
@@ -462,17 +544,11 @@ void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, vector<Bullet>& bu
 
     // display player stats
     setConsoleColor(12);
-    wcout << "Enemy kills: " << player.kills << endl;
-    wcout << "Bullets fired: " << player.bullets_fired << endl;
-    wcout << "Bullets: " << player.bullets << endl;
-    wcout << "Missiles fired: " << player.rockets_fired << endl;
-    wcout << "Missiles: " << player.rockets << endl;
-    wcout << "Score: " << player.score << endl;
-    wcout << "Health: ";
+    player.info();
 
     // draw player HP {
-    for (int i = 0; i < player.hp / 10; i++) wcout << L"█";
-    for (int i = 0; i < 10 - player.hp / 10; i++) wcout << L"░";
+    for (int i = 0; i < player.getHP() / 10; i++) wcout << L"█";
+    for (int i = 0; i < 10 - player.getHP() / 10; i++) wcout << L"░";
     setConsoleColor(8);
 
     // display messages
@@ -504,7 +580,7 @@ void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, vector<Bullet>& bu
     else power_up_collected_message_counter = 0;
 
     static unsigned int player_low_hp_message_counter = 0;
-    if (player.hp <= 20) {
+    if (player.getHP() <= 20) {
         if (player_low_hp_message_counter % 2) {
             setConsoleColor(12);
             wcout << data.message3;
@@ -547,8 +623,7 @@ int main() {
 
     char map[MAP_HEIGHT][MAP_WIDTH];
     Player player;
-    vector<Bullet>bullets;
-    Rocket rocket;
+    Rocket rocket(Position(), 100, false, ' ');
     vector<Enemy> enemies;
     vector<PowerUp> powerups;
     Data data;
@@ -562,8 +637,7 @@ int main() {
         menu_option = _getch();
         switch (menu_option) {
         case '1':
-            resetPlayerStats(player, bullets, enemies);                    
-            rocket.isActive = false;
+            player.reset();
 
             data.display_no_bullets = false;            
             data.display_no_rockets = false;
@@ -571,50 +645,45 @@ int main() {
             data.powerup_and_player_collision = false;
             data.powerup_spawn_condition = false;
 
-            player.bullets_fired = 0;
-            player.rockets_fired = 0;
-            player.cause_of_death = 0;
             initMap(map);
             spawnEnemies(player, enemies, 4);
             while (true) {
                 if (_kbhit()) { // reading pressed keys
                     key = _getch();
-                    if ((key == 'w' || key == 'W') && player.pos.y > 0) { // up
-                        player.pos.y--;
-                        player.facing = 'w';
+                    if ((key == 'w' || key == 'W') && player.getPosition().getY() > 0) { // up
+                        player.move(0, -1);
+                        player.setDirection('w');
                     }
-                    if ((key == 'a' || key == 'A') && player.pos.x > 0) { // left
-                        player.pos.x--;
-                        player.facing = 'a';
+                    if ((key == 'a' || key == 'A') && player.getPosition().getX() > 0) { // left
+                        player.move(-1, 0);
+                        player.setDirection('a');
                     }
-                    if ((key == 's' || key == 'S') && player.pos.y < MAP_HEIGHT - 1) { // down
-                        player.pos.y++;
-                        player.facing = 's';
+                    if ((key == 's' || key == 'S') && player.getPosition().getY() < MAP_HEIGHT - 1) { // down
+                        player.move(0, 1);
+                        player.setDirection('s');
                     }
-                    if ((key == 'd' || key == 'D') && player.pos.x < MAP_WIDTH - 1) { // right
-                        player.pos.x++;
-                        player.facing = 'd';
+                    if ((key == 'd' || key == 'D') && player.getPosition().getX() < MAP_WIDTH - 1) { // right
+                        player.move(1, 0);
+                        player.setDirection('d');
                     }
                     if ((key == 'f' || key == 'F')) {
-                        if (player.bullets == 0) {
+                        if (player.getBulletsCount() == 0) {
                             data.display_no_bullets = true;
                         }
                         else {
-                            createBullet(player, bullets, enemies, false); // shoot a bullet
-                            thread(playBulletSound).detach();
-                            player.bullets--;
-                            player.bullets_fired++;
+                            player.shoot(); // shoot a bullet
                         }
                     }
-                    if ((key == 'r' || key == 'R') && !(rocket.isActive)) {
-                        if (player.rockets == 0) {
+                    if ((key == 'r' || key == 'R') && !(rocket.isActive())) {
+                        if (player.getRocketsCount() == 0) {
                             data.display_no_rockets = true;
                         }
                         else {
-                            createRocket(player, rocket); // shoot a rocket
+                            rocket = Rocket(player.getPosition(), 100, false, player.getDirection()); // shoot a rocket
+                            rocket.activate();
+                            player.modifyRocketsCount(-1);
                             thread(playRocketSound).detach();
-                            player.rockets--;
-                            player.rockets_fired++;
+                            player.modifyRocketsFired(1);
                         }
                     }
                     // test only
@@ -622,64 +691,69 @@ int main() {
                         spawnEnemies(player, enemies, 4);
                 }
 
+                // move bullets
+                for (auto& bullet : player.getBullets()) {
+                    bullet.move();
+                }
+
                 // iterate enemies vector
                 for (auto& enemy : enemies) {
-                    if (checkPlayerBulletAndEnemyCollision(enemy, bullets)) {
+                    if (checkPlayerBulletAndEnemyCollision(player, enemy)) {
                         thread(playEnemyHitSound).detach();
-                        enemy.isHit = true;
-                        enemy.hp -= 30;
-                        player.score += 10;
-                        if (enemy.hp <= 0) 
+                        enemy.setIsHit(true);
+                        enemy.modifyHealth(-30);
+                        player.modifyScore(10);
+                        if (enemy.getHP() <= 0) 
                             data.powerup_spawn_condition = true;
                     }
                     if (checkPlayerRocketAndEnemyCollision(enemy, rocket)) {
                         thread(playEnemyHitSound).detach();
-                        rocket.isActive = false;
-                        enemy.hp = 0;
+                        rocket.deactivate();
+                        enemy.modifyHealth(-static_cast<int>(rocket.getDamage()));
                     }
-                    if (enemy.hp <= 0) {
+                    if (enemy.getHP() <= 0) {
                         thread(playEnemyKilledSound).detach();
-                        enemy.bullet.isActive = false;
-                        player.score += 50;
-                        player.kills++;
+                        enemy.getBullet().deactivate();
+                        player.modifyScore(50);
+                        player.kill();
                         data.display_enemy_killed = true;
                         data.powerup_spawn_condition = true;
                         if (data.powerup_spawn_condition) {
                             int temp_rand = rand() % 4;
                             if (temp_rand == 0 || temp_rand == 2) 
-                                createPowerUp(player, powerups, 0);
+                                powerups.emplace_back(PowerUp(player, 0));
                             else if (temp_rand == 1) 
-                                createPowerUp(player, powerups, 1);
+                                powerups.emplace_back(PowerUp(player, 1));
                             data.powerup_spawn_condition = false;
                         }
                     }                   
-                    moveEnemyBullet(enemy);
-                    if (playerNearEnemy(player, enemy) && !enemy.bullet.isActive) createBullet(player, bullets, enemies, true);
+                    enemy.getBullet().move();
+                    if (playerNearEnemy(player, enemy) && !enemy.getBullet().isActive()) enemy.shoot(player);
                     if (checkEnemyBulletAndPlayerCollision(player, enemy)) {
-                        player.hp -= 20;
-                        enemy.bullet.isActive = false;
+                        player.modifyHealth(-20);
+                        enemy.getBullet().deactivate();
                     }
                     if (checkPlayerAndEnemyCollision(player, enemy)) {
-                        player.cause_of_death = 1;
-                        player.hp = 0;
+                        player.setCauseOfDeath(1);
+                        player.modifyHealth(-100);
                     }
-                    enemy.isHit = false;
+                    enemy.setIsHit(false);                   
                 }
                 enemies.erase(
                     remove_if(enemies.begin(), enemies.end(),
-                        [](const Enemy& e) { return e.hp <= 0; }),
+                        [](Enemy& e) { return e.getHP() <= 0; }),
                     enemies.end());
 
                 // iterate powerups vector
                 for (auto it = powerups.begin(); it != powerups.end();) {
                     if (checkPlayerAndPowerUpCollision(player, *it)) {
                         thread(playPowerUpPickedSound).detach();
-                        if (it->type == 0) {
-                            player.hp += 20;
+                        if (it->getType() == 0) {
+                            player.modifyHealth(20);
                         }
-                        else {
-                            player.bullets += rand() % 10 + 11;
-                            player.rockets += rand() % 4 + 2;
+                        else if (it->getType() == 1) {
+                            player.modifyBulletsCount(rand() % 10 + 11);
+                            player.modifyRocketsCount(rand() % 4 + 2);
                         }
                         data.powerup_and_player_collision = true;
                         it = powerups.erase(it);
@@ -689,25 +763,24 @@ int main() {
                 }
 
                 // check if player has not been killed
-                if (player.hp <= 0) {
-                    gameOver(player, bullets, enemies, powerups);
+                if (player.getHP() <= 0) {
+                    gameOver(player, enemies, powerups);
                     break;
                 }
 
                 // move entities
-                moveEnemy(player, enemies);
-                moveBullet(bullets);
-                moveRocket(rocket);
+                moveEnemies(player, enemies);
+                rocket.move();
 
                 // draw map and set some game data false
-                drawMap(map, player, bullets, rocket, enemies, powerups, data);   
+                drawMap(map, player, rocket, enemies, powerups, data);   
 
                 data.powerup_and_player_collision = false;
                 data.display_no_bullets = false;
                 data.display_no_rockets = false;
                 data.display_enemy_killed = false;
                 
-                if (player.hp > 100) player.hp = 100;
+                player.normalizeHP();
 
                 // framerate and game speed
                 Sleep(40);
