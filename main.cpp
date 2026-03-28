@@ -857,15 +857,15 @@ int main() {
             // display information about the author
             system("cls");
             wcout << "\n\n\n";
-            wcout << L"   ╔════════════════════════════════════════════════════╗ \n";
-            wcout << L"   ║   Game fully made by Ignacy \"Raxyen\" Chmielewski   ║░ \n";
+            wcout << L"   ╔═══════════════════════════════════════════════════╗ \n";
+            wcout << L"   ║             Game fully made by Raxyen.            ║░ \n";
             wcout << L"   ║";
             setConsoleColor(10);
             wcout << L"                www.youtube.com/raxyen              ";
             setConsoleColor(7);
             wcout << L"║░ \n";
-            wcout << L"   ╚════════════════════════════════════════════════════╝░ \n";
-            wcout << L"    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ \n";
+            wcout << L"   ╚═══════════════════════════════════════════════════╝░ \n";
+            wcout << L"    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ \n";
             setConsoleColor(10);
             wcout << L"\n   Press any key to proceed to the menu.";
             setConsoleColor(7);
