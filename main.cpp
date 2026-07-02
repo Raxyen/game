@@ -1,8 +1,10 @@
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <array>
 #include <algorithm>
 #include <thread>
+#include <fstream>
 #include <cstdlib>
 #include <cmath>
 #include <ctime>
@@ -18,22 +20,31 @@ using namespace std;
 
 // sound
 
+void playMenuSound() { thread([] { Beep(500, 50); }).detach(); }
+
 void playEnemyHitSound() { thread([] { Beep(300, 50); }).detach(); }
+
+void playerHitSound() {
+    thread([] {
+        Beep(200, 100);
+        Beep(150, 100);
+		}).detach();
+}
 
 void playEnemyKilledSound() {
     thread([] {
+        Beep(300, 50);
         Beep(300, 50);
         Beep(400, 50);
         }).detach();
 }
 
-void playBulletSound() {
-    thread([] {
-        Beep(1000, 30);
-        }).detach();
-}
+void playBulletSound() { thread([] { Beep(1000, 30); }).detach(); }
 
-void playRocketSound() { thread([] { Beep(60, 1000); }).detach(); }
+void playRocketSound() { thread([] { 
+    for (DWORD i = 300; i > 60; i -= 10)
+        Beep(i, 20); }).detach(); 
+}
 
 void playPowerUpPickedSound() {
     thread([] {
@@ -68,17 +79,19 @@ public:
 class Projectile {
 protected:
     Position pos;
+    Position prevPos;
     unsigned int damage;
     float speed;
     bool is_enemy;
     bool is_active;
     char direction;
 public:
-    Projectile() {} // default
+    Projectile() = default;
     Projectile(Position p_pos, unsigned int p_damage, float p_speed, bool p_is_enemy, char p_direction)
-        : pos(p_pos), damage(p_damage), speed(p_speed), is_enemy(p_is_enemy), direction(p_direction), is_active(true) {}
+        : pos(p_pos), prevPos(p_pos), damage(p_damage), speed(p_speed), is_enemy(p_is_enemy), direction(p_direction), is_active(true) {}
 
     inline Position getPosition() { return pos; }
+    inline Position getPrevPosition() { return prevPos; }
     inline void setPosition(Position pos) { this->pos = pos; }
 
     inline char getDirection() { return direction; }
@@ -93,6 +106,8 @@ public:
 
     void move() { // moves projectile
         if (this->is_active) {
+            // store previous position to allow segment-based collision checks (fixes tunneling)
+            prevPos = pos;
             if (direction == 'w' && pos.getY() > 0) pos.moveY(-speed);
             else if (direction == 'a' && pos.getX() > 0) pos.moveX(-speed);
             else if (direction == 's' && pos.getY() < MAP_HEIGHT - 1) pos.moveY(speed);
@@ -120,6 +135,7 @@ class Player {
 private:
     Position pos;
     vector<Bullet> bullets;
+    string name;
     char direction;
     int hp;
     unsigned int kills;
@@ -143,10 +159,15 @@ public:
 
     inline int getHP() { return hp; }
 
+    inline unsigned int getScore() { return score; }
+
     inline unsigned int getBulletsCount() { return bullets_count; }
     inline unsigned int getRocketsCount() { return rockets_count; }
 
     inline void setCauseOfDeath(int cause) { this->cause_of_death = cause; }
+
+    inline void setName(string name) { this->name = name; }
+    inline string getName() { return name; }
 
     void modifyHealth(int health) { this->hp += health; }
     void modifyScore(int score) { this->score += score; }
@@ -170,7 +191,6 @@ public:
         bullets.emplace_back(bullet);
         bullets_count--;
         bullets_fired++;
-        thread(playBulletSound).detach();
     }
 
     void reset() {
@@ -217,12 +237,11 @@ public:
         is_hit(false), direction(p_direction), hp(100), speed(0.2f), texture('X') {
         unsigned int x = rand() % (MAP_WIDTH - 2) + 1;
         unsigned int y = rand() % (MAP_HEIGHT - 2) + 1;
-        if (x != player.getPosition().getX() && y != player.getPosition().getY()) {
-            pos = Position(x, y);
-        }
-        else {
-            pos = Position(x + rand() % 3 - 2, y + rand() % 3 - 2);
-        }
+        do {
+            x = rand() % (MAP_WIDTH - 2) + 1;
+            y = rand() % (MAP_HEIGHT - 2) + 1;
+        } while (x == static_cast<int>(player.getPosition().getX()) && y == static_cast<int>(player.getPosition().getY()));
+        pos = Position(static_cast<float>(x), static_cast<float>(y));
         bullet = Bullet(getPosition(), 20, true, ' ');
         bullet.deactivate();
     }
@@ -281,6 +300,44 @@ public:
     inline int getType() { return type; }
 };
 
+class FileManager {
+private:
+    ifstream in_file;
+    ofstream out_file;
+public:
+    void saveScoreToFile(Player& player) {
+        out_file.open("scores.txt", ios_base::app);
+        out_file << player.getName() << " " << player.getScore() << endl;
+        out_file.close();
+    }
+
+    vector <pair<wstring, unsigned int>> readScoreListFromFile() {
+        in_file.open("scores.txt");
+        vector <pair<wstring, unsigned int>> scorelist;
+        string temp_name;
+        unsigned int temp_score;
+        while (in_file >> temp_name >> temp_score) {
+            // convert narrow string to wide string before storing
+            wstring wname(temp_name.begin(), temp_name.end());
+            scorelist.emplace_back(make_pair(wname, temp_score));
+        }
+        in_file.close();
+        return scorelist;
+    }
+};
+
+class Wave {
+private:
+    unsigned int enemy_count;
+    unsigned int enemy_damage;
+    unsigned int boss_count;
+    unsigned int boss_damage;
+public:
+    Wave(array<unsigned int, 4> params) :
+        enemy_count(params[0]), enemy_damage(params[1]), boss_count(params[2]), boss_damage(params[3]) {
+    }
+};
+
 struct Data {
     wstring message1 = L"\nEnemy eliminated!";
     wstring message2 = L"\nPowerup collected!";
@@ -315,9 +372,10 @@ void menu() {
     wcout << L"║ 1 ║  Play!            ║\n";
     wcout << L"║ 2 ║  Controls         ║\n";
     wcout << L"║ 3 ║  Tutorial         ║\n";
-    wcout << L"║ 4 ║  Scorelist (wip)  ║\n";
+    wcout << L"║ 4 ║  Scorelist        ║\n";
     wcout << L"║ 5 ║  Credits          ║\n";
-    wcout << L"║ 6 ║  Quit game        ║\n";
+    wcout << L"║ 6 ║  Settings         ║\n";
+    wcout << L"║ 7 ║  Quit game        ║\n";
     wcout << L"╚═══╩═══════════════════╝\n";
 }
 
@@ -331,7 +389,7 @@ void resetPlayerStats(Player& player, vector<Enemy>& enemies) {
         enemy.getBullet().deactivate();
 }
 
-void gameOver(Player& player, vector<Enemy>& enemies, vector<PowerUp>& powerups) {
+string gameOver(Player& player, vector<Enemy>& enemies, vector<PowerUp>& powerups) {
     system("cls");
     setConsoleColor(12);
     wcout << "\n\n\n";
@@ -345,13 +403,18 @@ void gameOver(Player& player, vector<Enemy>& enemies, vector<PowerUp>& powerups)
     enemies.clear();
     player.getBullets().clear();
     powerups.clear();
-    Sleep(2000);
-    _getch();
+    Sleep(3000);
     resetPlayerStats(player, enemies);
+    _getch();
     setConsoleColor(7);
+    system("cls");
+    string name;
+    wcout << "Name: ";
+    getline(cin, name);
+    return name;
 }
 
-void initMap(char map[MAP_HEIGHT][MAP_WIDTH]) { // initializes map fields
+void initMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH> map) { // initializes map fields
     for (int i = 0; i < MAP_HEIGHT; i++) {
         for (int j = 0; j < MAP_WIDTH; j++) map[i][j] = ' ';
     }
@@ -403,16 +466,34 @@ void moveEnemies(Player& player, vector<Enemy>& enemies) {
 // game objects collisions
 
 bool checkPlayerBulletAndEnemyCollision(Player& player, Enemy& enemy) {
+    // check against segment from previous to current bullet position to avoid tunneling
     for (Bullet& bullet : player.getBullets()) {
-        if (bullet.isActive() && !bullet.isEnemy()) {
-            float dx = fabs(enemy.getPosition().getX() - bullet.getPosition().getX());
-            float dy = fabs(enemy.getPosition().getY() - bullet.getPosition().getY());
+        if (!bullet.isActive() || bullet.isEnemy()) 
+            continue;
+        Position p1 = bullet.getPrevPosition();
+        Position p2 = bullet.getPosition();
+        float ex = enemy.getPosition().getX();
+        float ey = enemy.getPosition().getY();
 
-            // solve tunneling problem
-            if (dx < 0.6f && dy < 0.6f) {
-                bullet.deactivate();
-                return true;
-            }
+        // project enemy center onto the segment p1-p2 and compute distance
+        float vx = p2.getX() - p1.getX();
+        float vy = p2.getY() - p1.getY();
+        float wx = ex - p1.getX();
+        float wy = ey - p1.getY();
+        float len2 = vx*vx + vy*vy;
+        float t = 0.0f;
+        if (len2 > 0.0001f) t = (vx*wx + vy*wy) / len2;
+        if (t < 0.0f) t = 0.0f;
+        else if (t > 1.0f) t = 1.0f;
+        float closestX = p1.getX() + t * vx;
+        float closestY = p1.getY() + t * vy;
+        float dx = fabs(ex - closestX);
+        float dy = fabs(ey - closestY);
+
+        // if within threshold consider it a hit
+        if (dx < 0.6f && dy < 0.6f) {
+            bullet.deactivate();
+            return true;
         }
     }
     return false;
@@ -448,7 +529,7 @@ bool playerNearEnemy(Player& player, Enemy& enemy) {
 }
 
 // drawing map
-void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, Rocket& rocket, vector<Enemy>& enemies, vector<PowerUp>& powerups, Data& data) {
+void drawMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH> map, Player& player, Rocket& rocket, vector<Enemy>& enemies, vector<PowerUp>& powerups, Data& data) {
     system("cls");
 
     setConsoleColor(7);
@@ -621,14 +702,20 @@ void drawMap(char map[MAP_HEIGHT][MAP_WIDTH], Player& player, Rocket& rocket, ve
 int main() {
     srand(time(NULL));
 
-    char map[MAP_HEIGHT][MAP_WIDTH];
+    array<array<char, MAP_HEIGHT>, MAP_WIDTH> map;
     Player player;
     Rocket rocket(Position(), 100, false, ' ');
     vector<Enemy> enemies;
     vector<PowerUp> powerups;
     Data data;
+    FileManager file_manager;
+
+    // temp
+    vector <pair<wstring, unsigned int>> scorelist;
+    unsigned short score_number = 1;
 
     char key;
+    bool sound_on = true;
 
     setupConsole();
     char menu_option;
@@ -637,6 +724,13 @@ int main() {
         menu_option = _getch();
         switch (menu_option) {
         case '1':
+            // map initialization
+            if (sound_on)
+                thread(playMenuSound).detach();
+
+            for (auto& row : map)
+                row.fill(' ');
+
             player.reset();
 
             data.display_no_bullets = false;            
@@ -645,7 +739,6 @@ int main() {
             data.powerup_and_player_collision = false;
             data.powerup_spawn_condition = false;
 
-            initMap(map);
             spawnEnemies(player, enemies, 4);
             while (true) {
                 if (_kbhit()) { // reading pressed keys
@@ -672,6 +765,8 @@ int main() {
                         }
                         else {
                             player.shoot(); // shoot a bullet
+                            if (sound_on)
+                                thread(playBulletSound).detach();
                         }
                     }
                     if ((key == 'r' || key == 'R') && !(rocket.isActive())) {
@@ -682,7 +777,8 @@ int main() {
                             rocket = Rocket(player.getPosition(), 100, false, player.getDirection()); // shoot a rocket
                             rocket.activate();
                             player.modifyRocketsCount(-1);
-                            thread(playRocketSound).detach();
+                            if (sound_on) 
+                                thread(playRocketSound).detach();
                             player.modifyRocketsFired(1);
                         }
                     }
@@ -699,7 +795,8 @@ int main() {
                 // iterate enemies vector
                 for (auto& enemy : enemies) {
                     if (checkPlayerBulletAndEnemyCollision(player, enemy)) {
-                        thread(playEnemyHitSound).detach();
+                        if (sound_on)
+                            thread(playEnemyHitSound).detach();
                         enemy.setIsHit(true);
                         enemy.modifyHealth(-30);
                         player.modifyScore(10);
@@ -707,12 +804,14 @@ int main() {
                             data.powerup_spawn_condition = true;
                     }
                     if (checkPlayerRocketAndEnemyCollision(enemy, rocket)) {
-                        thread(playEnemyHitSound).detach();
+                        if (sound_on)
+                            thread(playEnemyHitSound).detach();
                         rocket.deactivate();
                         enemy.modifyHealth(-static_cast<int>(rocket.getDamage()));
                     }
                     if (enemy.getHP() <= 0) {
-                        thread(playEnemyKilledSound).detach();
+                        if (sound_on)
+                            thread(playEnemyKilledSound).detach();
                         enemy.getBullet().deactivate();
                         player.modifyScore(50);
                         player.kill();
@@ -728,9 +827,12 @@ int main() {
                         }
                     }                   
                     enemy.getBullet().move();
-                    if (playerNearEnemy(player, enemy) && !enemy.getBullet().isActive()) enemy.shoot(player);
+                    if (playerNearEnemy(player, enemy) && !enemy.getBullet().isActive()) 
+                        enemy.shoot(player);
                     if (checkEnemyBulletAndPlayerCollision(player, enemy)) {
                         player.modifyHealth(-20);
+                        if (sound_on)
+                            thread(playerHitSound).detach();
                         enemy.getBullet().deactivate();
                     }
                     if (checkPlayerAndEnemyCollision(player, enemy)) {
@@ -747,7 +849,8 @@ int main() {
                 // iterate powerups vector
                 for (auto it = powerups.begin(); it != powerups.end();) {
                     if (checkPlayerAndPowerUpCollision(player, *it)) {
-                        thread(playPowerUpPickedSound).detach();
+                        if (sound_on)
+                            thread(playPowerUpPickedSound).detach();
                         if (it->getType() == 0) {
                             player.modifyHealth(20);
                         }
@@ -764,7 +867,8 @@ int main() {
 
                 // check if player has not been killed
                 if (player.getHP() <= 0) {
-                    gameOver(player, enemies, powerups);
+                    player.setName(gameOver(player, enemies, powerups));
+                    file_manager.saveScoreToFile(player);
                     break;
                 }
 
@@ -788,7 +892,8 @@ int main() {
             break;
         case '2':
             // display controls
-            while (1) {
+            thread(playMenuSound).detach();
+            while (true) {
                 system("cls");
                 wcout << L"╔════════════════════════╗\n";
                 wcout << L"║      * CONTROLS *      ║\n";
@@ -809,6 +914,8 @@ int main() {
             break;
         case '3':
             // display game rules 
+            if (sound_on)
+                thread(playMenuSound).detach();
             system("cls");
             wcout << L"\n   Goal: Survive as long as you can with infinite\n";
             wcout << L"   enemies coming towards you\n\n";
@@ -853,19 +960,37 @@ int main() {
             _getch();
             system("cls");
             break;
+        case '4':   
+			// display scorelist read from file
+            if (sound_on)
+                thread(playMenuSound).detach();
+            scorelist = file_manager.readScoreListFromFile();
+            system("cls");
+            wcout << L"   ╔═════════════════════════════════════╗\n";
+            wcout << L"   ║            * SCORELIST *            ║\n";
+            wcout << L"   ╠═════╦══════════════════════╦════════╣ \n";
+            for (const auto& line : scorelist) {
+                wcout << L"   ║" << fixed << setw(4) << score_number << L" ║ " << setw(20) << line.first << L" ║ " << setw(6) << line.second << L" ║" << endl;
+                score_number++;
+            }
+            wcout << L"   ╚═════╩══════════════════════╩════════╝ \n";
+            _getch();
+            break;
         case '5':
             // display information about the author
+            if (sound_on)
+                thread(playMenuSound).detach();
             system("cls");
             wcout << "\n\n\n";
-            wcout << L"   ╔═══════════════════════════════════════════════════╗ \n";
-            wcout << L"   ║             Game fully made by Raxyen.            ║░ \n";
+            wcout << L"   ╔════════════════════════════════════════════════════╗ \n";
+            wcout << L"   ║   Game fully made by Ignacy \"Raxyen\" Chmielewski   ║░ \n";
             wcout << L"   ║";
             setConsoleColor(10);
             wcout << L"                www.youtube.com/raxyen              ";
             setConsoleColor(7);
             wcout << L"║░ \n";
-            wcout << L"   ╚═══════════════════════════════════════════════════╝░ \n";
-            wcout << L"    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ \n";
+            wcout << L"   ╚════════════════════════════════════════════════════╝░ \n";
+            wcout << L"    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ \n";
             setConsoleColor(10);
             wcout << L"\n   Press any key to proceed to the menu.";
             setConsoleColor(7);
@@ -873,8 +998,36 @@ int main() {
             system("cls");
             break;
         case '6':
+            // options
+            if (sound_on)
+                thread(playMenuSound).detach();
+            system("cls");
+            while (true) {
+                system("cls");
+                wcout << L"╔═════════════════════════╗\n";
+                wcout << L"║      *  OPTIONS  *      ║\n";
+                wcout << L"╠═══╦═══════════════╦═════╣\n";
+                wcout << L"║ 1 ║  Sound        ║ ";
+                sound_on ? wcout << "ON " : wcout << "OFF";
+                wcout << L" ║\n";
+                wcout << L"╚═══╩═══════════════╩═════╝\n";
+                setConsoleColor(10);
+                wcout << L"\n   Press ESC to proceed to the menu.";
+                setConsoleColor(7);
+
+                int key = _getch();
+                if (key == '1') {
+                    sound_on = !sound_on;
+                }
+                else if (key == 27) { // ESC
+                    break;
+                }
+            }
+            break;
+        case '7':
+            thread(playMenuSound).detach();
             // display quit screen
-            while (1)
+            while (true)
             {
                 system("cls");
                 setConsoleColor(9);
@@ -886,7 +1039,7 @@ int main() {
                 wcout << L"    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\n";
                 char quit;
                 quit = _getch();
-                if (quit == 'y' || quit == 'Y') return 0; // exits the application if provided character is 't'
+                if (quit == 'y' || quit == 'Y') return 0; // exits the application if provided character is 'y'
                 else if (quit == 'n' || quit == 'N') {
                     setConsoleColor(7);
                     break; // returns to main menu loop if provided character is 'n'               
