@@ -9,7 +9,7 @@ private:
     Position pos;
     Bullet bullet;
     float speed;
-    char texture;
+    wchar_t texture;
     bool is_hit;
     char direction;
     int hp;
@@ -22,7 +22,7 @@ public:
     void setBullet(Bullet bullet);
     float getSpeed();
     int getHP();
-    char getTexture();
+    wchar_t getTexture();
 
     bool isHit();
     void setIsHit(bool is_hit);

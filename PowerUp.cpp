@@ -1,7 +1,15 @@
 #include "PowerUp.h"
 
 PowerUp::PowerUp(Player& player, int p_type) : type(p_type) {
-    texture = (type == 1) ? '*' : '$';
+    switch (type) {
+        case 0:
+            texture = L'♥';
+            break;
+        case 1:
+            texture = L'⌻';
+            break;
+    }
+
     unsigned int x, y;
     do {
         x = rand() % (MAP_WIDTH - 2) + 1;
@@ -11,5 +19,5 @@ PowerUp::PowerUp(Player& player, int p_type) : type(p_type) {
 }
 
 Position PowerUp::getPosition() { return pos; }
-char PowerUp::getTexture() { return texture; }
+wchar_t PowerUp::getTexture() { return texture; }
 int PowerUp::getType() { return type; }

@@ -5,5 +5,6 @@
 
 class Rocket : public Projectile {
 public:
+    Rocket();
     Rocket(Position p_pos, unsigned int p_damage, bool p_is_enemy, char p_direction);
 };

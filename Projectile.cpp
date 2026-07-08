@@ -1,8 +1,8 @@
 #include "Projectile.h"
 
 Projectile::Projectile() = default;
-Projectile::Projectile(Position p_pos, unsigned int p_damage, float p_speed, bool p_is_enemy, char p_direction)
-    : pos(p_pos), prevPos(p_pos), damage(p_damage), speed(p_speed), is_enemy(p_is_enemy), direction(p_direction), is_active(true) {}
+Projectile::Projectile(Position p_pos, unsigned int p_damage, float p_speed, bool p_is_enemy, char p_direction, char p_type)
+    : pos(p_pos), prevPos(p_pos), damage(p_damage), speed(p_speed), is_enemy(p_is_enemy), direction(p_direction), is_active(true), type(p_type) {}
 
 Position Projectile::getPosition() { return pos; }
 Position Projectile::getPrevPosition() { return prevPos; }
@@ -17,6 +17,8 @@ bool Projectile::isActive() { return is_active; }
 bool Projectile::isEnemy() { return is_enemy; }
 
 unsigned int Projectile::getDamage() { return this->damage; }
+
+char Projectile::getType() { return type; }
 
 void Projectile::move() { // moves projectile
     if (this->is_active) {

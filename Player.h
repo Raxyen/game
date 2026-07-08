@@ -4,13 +4,15 @@
 
 #include "Position.h"
 #include "Bullet.h"
+#include "Rocket.h"
 
 class Player {
 private:
     Position pos;
-    std::vector<Bullet> bullets;
+    std::vector<Projectile> projectiles;
     std::string name;
 
+    wchar_t texture = L'⎔';
     char direction;
     int hp;
 
@@ -28,11 +30,13 @@ public:
     Position getPosition();
     void setPosition(Position pos);
 
-    std::vector<Bullet>& getBullets();
-    const std::vector<Bullet>& getBullets() const;
+    std::vector<Projectile>& getProjectiles();
+    const std::vector<Projectile>& getProjectiles() const;
 
     char getDirection();
     void setDirection(char direction);
+
+    wchar_t getTexture();
 
     int getHP();
 
@@ -54,7 +58,7 @@ public:
     void kill();
     void normalizeHP();
     void move(float dx, float dy);
-    void shoot();
+    void shoot(char type);
     void reset();
     void info();
     void finalInfo();

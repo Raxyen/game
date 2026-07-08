@@ -10,9 +10,10 @@ protected:
     bool is_enemy;
     bool is_active;
     char direction;
+    char type;
 public:
     Projectile();
-    Projectile(Position p_pos, unsigned int p_damage, float p_speed, bool p_is_enemy, char p_direction);
+    Projectile(Position p_pos, unsigned int p_damage, float p_speed, bool p_is_enemy, char p_direction, char type);
 
     Position getPosition();
     Position getPrevPosition();
@@ -27,6 +28,8 @@ public:
     bool isEnemy();
 
     unsigned int getDamage();
+
+    char getType();
 
     void move();
 };

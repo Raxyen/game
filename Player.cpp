@@ -6,49 +6,108 @@ using namespace std;
 
 Player::Player() { reset(); }
 
-Position Player::getPosition() { return pos; }
-void Player::setPosition(Position pos) { this->pos = pos; }
+Position Player::getPosition() { 
+    return pos; 
+}
 
-std::vector<Bullet>& Player::getBullets() { return bullets; }
-const vector<Bullet>& Player::getBullets() const { return bullets; }
+void Player::setPosition(Position pos) { 
+    this->pos = pos; 
+}
 
-char Player::getDirection() { return direction; }
-void Player::setDirection(char direction) { this->direction = direction; }
+std::vector<Projectile>& Player::getProjectiles() { 
+    return projectiles; 
+}
 
-int Player::getHP() { return hp; }
+const vector<Projectile>& Player::getProjectiles() const { 
+    return projectiles; 
+}
 
-unsigned int Player::getScore() const { return score; }
+char Player::getDirection() { 
+    return direction; 
+}
 
-unsigned int Player::getBulletsCount() const { return bullets_count; }
-unsigned int Player::getRocketsCount() const { return rockets_count; }
+void Player::setDirection(char direction) {
+    this->direction = direction; 
+}
 
-void Player::setCauseOfDeath(int cause) { this->cause_of_death = cause; }
+wchar_t Player::getTexture() { 
+    return texture; 
+}
 
-void Player::setName(string name) { this->name = name; }
-string Player::getName() { return name; }
+int Player::getHP() { 
+    return hp; 
+}
 
-void Player::modifyHealth(int health) { this->hp += health; }
-void Player::modifyScore(int score) { this->score += score; }
+unsigned int Player::getScore() const { 
+    return score; 
+}
 
-void Player::modifyBulletsCount(int bullets_count) { this->bullets_count += bullets_count; }
-void Player::modifyRocketsCount(int rockets_count) { this->rockets_count += rockets_count; }
+unsigned int Player::getBulletsCount() const { 
+    return bullets_count; 
+}
 
-void Player::modifyRocketsFired(int rockets_fired) { this->rockets_fired += rockets_fired; }
+unsigned int Player::getRocketsCount() const { 
+    return rockets_count; 
+}
 
-void Player::kill() { kills++; }
+void Player::setCauseOfDeath(int cause) { 
+    this->cause_of_death = cause; 
+}
 
-void Player::normalizeHP() { if (hp > 100) hp = 100; }
+void Player::setName(string name) {
+    this->name = name; 
+}
+
+string Player::getName() { 
+    return name; 
+}
+
+void Player::modifyHealth(int health) { 
+    this->hp += health; 
+}
+
+void Player::modifyScore(int score) { 
+    this->score += score; 
+}
+
+void Player::modifyBulletsCount(int bullets_count) { 
+    this->bullets_count += bullets_count; 
+}
+
+void Player::modifyRocketsCount(int rockets_count) { 
+    this->rockets_count += rockets_count; 
+}
+
+void Player::modifyRocketsFired(int rockets_fired) { 
+    this->rockets_fired += rockets_fired; 
+}
+
+void Player::kill() { 
+    kills++; 
+}
+
+void Player::normalizeHP() { 
+    if (hp > 100) {
+        hp = 100;
+    }
+}
 
 void Player::move(float dx, float dy) {
     pos.moveX(dx);
     pos.moveY(dy);
 }
 
-void Player::shoot() {
-    Bullet bullet(getPosition(), 30, false, getDirection());
-    bullets.emplace_back(bullet);
-    bullets_count--;
-    bullets_fired++;
+void Player::shoot(char type) {
+    if (type == 'b') {
+        projectiles.emplace_back(Bullet(getPosition(), 30, false, getDirection()));
+        bullets_count--;
+        bullets_fired++;
+    }
+    else if (type == 'r') {
+        projectiles.emplace_back(Rocket(getPosition(), 100, false, getDirection()));
+        rockets_count--;
+        rockets_fired++;
+    }
 }
 
 void Player::reset() {

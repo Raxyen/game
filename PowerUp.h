@@ -9,11 +9,11 @@ class PowerUp {
 private:
     Position pos;
     int type;
-    char texture;
+    wchar_t texture;
 public:
     PowerUp(Player& player, int p_type);
 
     Position getPosition();
-    char getTexture();
+    wchar_t getTexture();
     int getType();
 };

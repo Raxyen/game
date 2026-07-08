@@ -79,9 +79,7 @@ struct Data {
 
 // system functions
 
-void setupConsole() // allows wide characters 
-{
-    SetConsoleOutputCP(CP_UTF8);
+void setupConsole() { // wide characters
     _setmode(_fileno(stdout), _O_U16TEXT);
 }
 
@@ -108,8 +106,7 @@ void menu() {
 // general game functions
 
 void resetPlayerStats(Player& player, vector<Enemy>& enemies) {
-
-    for (auto& bullet : player.getBullets())
+    for (auto& bullet : player.getProjectiles())
         bullet.deactivate();
     for (auto& enemy : enemies)
         enemy.getBullet().deactivate();
@@ -127,7 +124,7 @@ string gameOver(Player& player, vector<Enemy>& enemies, vector<PowerUp>& powerup
     wcout << L"    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\n\n";
     player.finalInfo();
     enemies.clear();
-    player.getBullets().clear();
+    player.getProjectiles().clear();
     powerups.clear();
     Sleep(3000);
     resetPlayerStats(player, enemies);
@@ -142,7 +139,9 @@ string gameOver(Player& player, vector<Enemy>& enemies, vector<PowerUp>& powerup
 
 void initMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH> map) { // initializes map fields
     for (int i = 0; i < MAP_HEIGHT; i++) {
-        for (int j = 0; j < MAP_WIDTH; j++) map[i][j] = ' ';
+        for (int j = 0; j < MAP_WIDTH; j++) {
+            map[i][j] = ' ';
+        }
     }
 }
 
@@ -191,42 +190,33 @@ void moveEnemies(Player& player, vector<Enemy>& enemies) {
 
 // game objects collisions
 
-bool checkPlayerBulletAndEnemyCollision(Player& player, Enemy& enemy) {
-    // check against segment from previous to current bullet position to avoid tunneling
-    for (Bullet& bullet : player.getBullets()) {
-        if (!bullet.isActive() || bullet.isEnemy())
+unsigned int checkPlayerProjectileAndEnemyCollision(Player& player, Enemy& enemy) {
+    for (Projectile& projectile : player.getProjectiles()) {
+        if (!projectile.isActive() || projectile.isEnemy())
             continue;
-        Position p1 = bullet.getPrevPosition();
-        Position p2 = bullet.getPosition();
-        float ex = enemy.getPosition().getX();
-        float ey = enemy.getPosition().getY();
 
-        // project enemy center onto the segment p1-p2 and compute distance
-        float vx = p2.getX() - p1.getX();
-        float vy = p2.getY() - p1.getY();
-        float wx = ex - p1.getX();
-        float wy = ey - p1.getY();
-        float len2 = vx * vx + vy * vy;
-        float t = 0.0f;
-        if (len2 > 0.0001f) t = (vx * wx + vy * wy) / len2;
-        if (t < 0.0f) t = 0.0f;
-        else if (t > 1.0f) t = 1.0f;
-        float closestX = p1.getX() + t * vx;
-        float closestY = p1.getY() + t * vy;
-        float dx = fabs(ex - closestX);
-        float dy = fabs(ey - closestY);
+        // casting float coordinates to ints
+        int x1 = static_cast<int>(projectile.getPrevPosition().getX());
+        int y1 = static_cast<int>(projectile.getPrevPosition().getY());
+        int x2 = static_cast<int>(projectile.getPosition().getX());
+        int y2 = static_cast<int>(projectile.getPosition().getY());
 
-        // if within threshold consider it a hit
-        if (dx < 0.6f && dy < 0.6f) {
-            bullet.deactivate();
-            return true;
+        int ex = static_cast<int>(enemy.getPosition().getX());
+        int ey = static_cast<int>(enemy.getPosition().getY());
+
+        // rectangle of tiles bullet flew through in this frame/tick
+        int minX = (x1 < x2) ? x1 : x2;
+        int maxX = (x1 > x2) ? x1 : x2;
+        int minY = (y1 < y2) ? y1 : y2;
+        int maxY = (y1 > y2) ? y1 : y2;
+
+        // check collision
+        if (ex >= minX && ex <= maxX && ey >= minY && ey <= maxY) {
+            projectile.deactivate();
+            return projectile.getDamage();
         }
     }
-    return false;
-}
-
-bool checkPlayerRocketAndEnemyCollision(Enemy& enemy, Rocket& rocket) { // checks if both the coordinates of enemy and player's rocket are equal (checks collision)
-    return (rocket.isActive() && static_cast<int>(enemy.getPosition().getX()) == static_cast<int>(rocket.getPosition().getX()) && static_cast<int>(enemy.getPosition().getY()) == static_cast<int>(rocket.getPosition().getY()));
+    return 0;
 }
 
 bool checkEnemyBulletAndPlayerCollision(Player& player, Enemy& enemy) { // checks if both the coordinates of enemy's bullet and player are equal (checks collision)
@@ -241,8 +231,8 @@ bool checkPlayerAndPowerUpCollision(Player& player, PowerUp& power_up) { // chec
     return (static_cast<int>(power_up.getPosition().getX()) == static_cast<int>(player.getPosition().getX()) && static_cast<int>(power_up.getPosition().getY()) == static_cast<int>(player.getPosition().getY()));
 }
 
-//checks whether the player distance from enemy is least or equal than 14 
-//and if the player and enemy are in the same line to make a shot possible
+// checks whether the player distance from enemy is least or equal than 14 
+// and if the player and enemy are in the same line to make a shot possible
 
 bool playerNearEnemy(Player& player, Enemy& enemy) {
     if (static_cast<int>(player.getPosition().getX()) == static_cast<int>(enemy.getPosition().getX()) && fabs(player.getPosition().getY() - enemy.getPosition().getY()) <= 14) {
@@ -255,8 +245,9 @@ bool playerNearEnemy(Player& player, Enemy& enemy) {
 }
 
 // drawing map
-void drawMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH> map, Player& player, Rocket& rocket, vector<Enemy>& enemies, vector<PowerUp>& powerups, Data& data) {
-    system("cls");
+void drawMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH>& map, Player& player, vector<Enemy>& enemies, vector<PowerUp>& powerups, Data& data) {
+    COORD coord = { 0, 0 };
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
 
     setConsoleColor(7);
     wcout << L"╔"; // left upper corner of the frame
@@ -270,35 +261,33 @@ void drawMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH> map, Player& player, Rock
         for (int j = 0; j < MAP_WIDTH; j++) {
             bool drawn = false; // flag to check if the element is drawn on x y
 
+            // draw player
             if (!drawn && i == static_cast<int>(player.getPosition().getY()) && j == static_cast<int>(player.getPosition().getX())) {
                 setConsoleColor(2); // set green color for player
-                wcout << '@'; // draw player 
+                wcout << player.getTexture(); // draw player 
                 setConsoleColor(7); // reset to white color
                 drawn = true;
             }
 
-            if (!drawn) { // draw player's bullets 
-                for (auto& bullet : player.getBullets()) {
-                    if (bullet.isActive() && i == static_cast<int>(bullet.getPosition().getY()) && j == static_cast<int>(bullet.getPosition().getX())) {
-                        setConsoleColor(8); // set gray color for bullet
-                        if (bullet.getDirection() == 'a' || bullet.getDirection() == 'd') wcout << L"─"; // horizontal bullet
-                        else if (bullet.getDirection() == 'w' || bullet.getDirection() == 's') wcout << L"│"; // vertical bullet
+            // draw player's projectiles (bullets and rockets) 
+            if (!drawn) { 
+                for (auto& projectile : player.getProjectiles()) {
+                    if (projectile.isActive() && i == static_cast<int>(projectile.getPosition().getY()) && j == static_cast<int>(projectile.getPosition().getX())) {
+                        setConsoleColor(8); // set gray color for projectile
+                        if (projectile.getType() == 'b') {
+                            wcout << L"·";
+                        }
+                        else if (projectile.getType() == 'r') {
+                            if (projectile.getDirection() == 'w') wcout << L"▲"; // rocket with up direction
+                            else if (projectile.getDirection() == 'a') wcout << L"◄"; // rocket with left direction
+                            else if (projectile.getDirection() == 's') wcout << L"▼"; // rocket with down direction
+                            else if (projectile.getDirection() == 'd') wcout << L"►"; // rocket with right direction  
+                        }
                         setConsoleColor(7); // reset to white color
                         drawn = true;
                         break;
                     }
                 }
-            }
-
-            // draw player's rocket
-            if (!drawn && rocket.isActive() && i == static_cast<int>(rocket.getPosition().getY()) && j == static_cast<int>(rocket.getPosition().getX())) {
-                setConsoleColor(8); // set gray color for rocket
-                if (rocket.getDirection() == 'w') wcout << L"↑"; // rocket with up direction
-                else if (rocket.getDirection() == 'a') wcout << L"←"; // rocket with left direction
-                else if (rocket.getDirection() == 's') wcout << L"↓"; // rocket with down direction
-                else if (rocket.getDirection() == 'd') wcout << L"→"; // rocket with right direction                
-                setConsoleColor(7); // reset to white color
-                drawn = true;
             }
 
             // draw enemies
@@ -319,8 +308,12 @@ void drawMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH> map, Player& player, Rock
                 for (auto& enemy : enemies) {
                     if (enemy.getBullet().isActive() && i == static_cast<int>(enemy.getBullet().getPosition().getY()) && j == static_cast<int>(enemy.getBullet().getPosition().getX())) { // draw enemy's bullet
                         setConsoleColor(12); // set light red color for rocket
-                        if (enemy.getBullet().getDirection() == 'a' || enemy.getBullet().getDirection() == 'd') wcout << L"─"; // horizontal bullet
-                        else if (enemy.getBullet().getDirection() == 'w' || enemy.getBullet().getDirection() == 's') wcout << L"│"; // vertical bullet
+                        if (enemy.getBullet().getDirection() == 'a' || enemy.getBullet().getDirection() == 'd') {
+                            wcout << L"·"; // horizontal bullet
+                        }
+                        else if (enemy.getBullet().getDirection() == 'w' || enemy.getBullet().getDirection() == 's') {
+                            wcout << L"·"; // vertical bullet
+                        }
                         setConsoleColor(7); // reset to white color
                         drawn = true;
                     }
@@ -433,7 +426,6 @@ int main() {
 
     array<array<char, MAP_HEIGHT>, MAP_WIDTH> map;
     Player player;
-    Rocket rocket(Position(), 100, false, ' ');
     vector<Enemy> enemies;
     vector<PowerUp> powerups;
     Data data;
@@ -493,22 +485,19 @@ int main() {
                             data.display_no_bullets = true;
                         }
                         else {
-                            player.shoot(); // shoot a bullet
+                            player.shoot('b'); // shoot a bullet
                             if (sound_on)
                                 thread(playBulletSound).detach();
                         }
                     }
-                    if ((key == 'r' || key == 'R') && !(rocket.isActive())) {
+                    if ((key == 'r' || key == 'R')) {
                         if (player.getRocketsCount() == 0) {
                             data.display_no_rockets = true;
                         }
                         else {
-                            rocket = Rocket(player.getPosition(), 100, false, player.getDirection()); // shoot a rocket
-                            rocket.activate();
-                            player.modifyRocketsCount(-1);
+                            player.shoot('r'); // shoot a rocket
                             if (sound_on)
                                 thread(playRocketSound).detach();
-                            player.modifyRocketsFired(1);
                         }
                     }
                     // test only
@@ -516,27 +505,28 @@ int main() {
                         spawnEnemies(player, enemies, 4);
                 }
 
-                // move bullets
-                for (auto& bullet : player.getBullets()) {
-                    bullet.move();
+                // move projectiles
+                for (auto& projectile : player.getProjectiles()) {
+                    projectile.move();
                 }
+
+                // remove inactive projectiles
+                player.getProjectiles().erase(
+                    remove_if(player.getProjectiles().begin(), player.getProjectiles().end(),
+                        [](Projectile& p) { return !p.isActive(); }),
+                    player.getProjectiles().end());
 
                 // iterate enemies vector
                 for (auto& enemy : enemies) {
-                    if (checkPlayerBulletAndEnemyCollision(player, enemy)) {
+                    unsigned dmg = checkPlayerProjectileAndEnemyCollision(player, enemy);
+                    if (dmg) {
                         if (sound_on)
                             thread(playEnemyHitSound).detach();
                         enemy.setIsHit(true);
-                        enemy.modifyHealth(-30);
+                        enemy.modifyHealth(dmg);
                         player.modifyScore(10);
                         if (enemy.getHP() <= 0)
                             data.powerup_spawn_condition = true;
-                    }
-                    if (checkPlayerRocketAndEnemyCollision(enemy, rocket)) {
-                        if (sound_on)
-                            thread(playEnemyHitSound).detach();
-                        rocket.deactivate();
-                        enemy.modifyHealth(-static_cast<int>(rocket.getDamage()));
                     }
                     if (enemy.getHP() <= 0) {
                         if (sound_on)
@@ -603,10 +593,9 @@ int main() {
 
                 // move entities
                 moveEnemies(player, enemies);
-                rocket.move();
 
                 // draw map and set some game data false
-                drawMap(map, player, rocket, enemies, powerups, data);
+                drawMap(map, player, enemies, powerups, data);
 
                 data.powerup_and_player_collision = false;
                 data.display_no_bullets = false;

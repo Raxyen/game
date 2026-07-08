@@ -1,7 +1,7 @@
 #include "Enemy.h"
 
 Enemy::Enemy(char p_direction, Player& player) :
-    is_hit(false), direction(p_direction), hp(100), speed(0.2f), texture('X') {
+    is_hit(false), direction(p_direction), hp(100), speed(0.2f), texture(L'⬢') {
     unsigned int x = rand() % (MAP_WIDTH - 2) + 1;
     unsigned int y = rand() % (MAP_HEIGHT - 2) + 1;
     do {
@@ -19,7 +19,7 @@ const Bullet& Enemy::getBullet() const { return bullet; }
 void Enemy::setBullet(Bullet bullet) { this->bullet = bullet; }
 float Enemy::getSpeed() { return speed; }
 int Enemy::getHP() { return hp; }
-char Enemy::getTexture() { return texture; }
+wchar_t Enemy::getTexture() { return texture; }
 
 bool Enemy::isHit() { return is_hit; }
 void Enemy::setIsHit(bool is_hit) { this->is_hit = is_hit; }
