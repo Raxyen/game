@@ -1,39 +1,48 @@
+#include <thread>
 #include <windows.h>
-#include <mmsystem.h> // Dodajemy nagłówek multimedialny
-
-// Informujemy Visual Studio, żeby podlinkowało systemową bibliotekę dźwięku WinMM
-#pragma comment(lib, "winmm.lib")
 
 #include "SoundSystem.h"
+
+using namespace std;
 
 SoundSystem::SoundSystem() = default;
 
 void SoundSystem::playMenuSound() {
-    // SND_ALIAS używa dźwięków systemowych, SND_ASYNC odtwarza w tle bez blokowania gry i BEZ WĄTKÓW!
-    PlaySoundW(L"SystemAsterisk", NULL, SND_ALIAS | SND_ASYNC);
+    thread([] { Beep(500, 50); }).detach();
 }
 
 void SoundSystem::playEnemyHitSound() {
-    PlaySoundW(L"SystemDefault", NULL, SND_ALIAS | SND_ASYNC);
+    thread([] { Beep(300, 50); }).detach();
 }
 
 void SoundSystem::playerHitSound() {
-    PlaySoundW(L"SystemHand", NULL, SND_ALIAS | SND_ASYNC);
+    thread([] {
+        Beep(200, 100);
+        Beep(150, 100);
+        }).detach();
 }
 
 void SoundSystem::playEnemyKilledSound() {
-    PlaySoundW(L"SystemQuestion", NULL, SND_ALIAS | SND_ASYNC);
+    thread([] {
+        Beep(300, 50);
+        Beep(300, 50);
+        Beep(400, 50);
+        }).detach();
 }
 
 void SoundSystem::playBulletSound() {
-    // Prosty, krótki sygnał dźwiękowy z głośniczka (odpowiednik Beep, ale nie blokuje tak wątku głównego)
-    MessageBeep(MB_OK);
+    thread([] { Beep(1000, 30); }).detach();
 }
 
 void SoundSystem::playRocketSound() {
-    MessageBeep(MB_ICONWARNING);
+    thread([] { Beep(200, 30); }).detach();
 }
 
 void SoundSystem::playPowerUpPickedSound() {
-    PlaySoundW(L"SystemExclamation", NULL, SND_ALIAS | SND_ASYNC);
+    thread([] {
+        Beep(400, 50);
+        Beep(500, 50);
+        Beep(400, 50);
+        Beep(500, 50);
+        }).detach();
 }
