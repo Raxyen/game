@@ -21,6 +21,7 @@
 #include "PowerUp.h"
 #include "SoundSystem.h"
 #include "Data.h"
+#include "Renderer.h"
 
 using namespace std;
 
@@ -30,6 +31,20 @@ void setupConsole() { // wide characters
     if (_setmode(_fileno(stdout), _O_U16TEXT) == -1) {
         wcerr << L"Error setting console mode\n";
     }
+
+    // WŁĄCZANIE OBSŁUGI KODÓW ANSI W KONSOLI WINDOWS:
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut != INVALID_HANDLE_VALUE) {
+        DWORD dwMode = 0;
+        if (GetConsoleMode(hOut, &dwMode)) {
+            dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            SetConsoleMode(hOut, dwMode);
+        }
+    }
+
+    // Dodatkowo odpinamy powolną synchronizację strumieni z C
+    std::ios_base::sync_with_stdio(false);
+    std::wcout.tie(NULL);
 }
 
 void setConsoleColor(int color) {
@@ -99,7 +114,7 @@ void spawnEnemies(Player& player, vector<Enemy>& enemies, unsigned int count) {
 }
 
 void moveEnemies(Player& player, vector<Enemy>& enemies) {
-	array<array<bool, MAP_HEIGHT>, MAP_WIDTH> occupied = { false };
+	array<array<bool, MAP_WIDTH>, MAP_HEIGHT> occupied = { false };
 
     for (auto& e : enemies)
         occupied[static_cast<int>(e.getPosition().getY())][static_cast<int>(e.getPosition().getX())] = true;
@@ -191,144 +206,142 @@ bool playerNearEnemy(Player& player, Enemy& enemy) {
 
 // drawing map
 void drawUpperBorder() {
-	wcout << L"╔"; // left upper corner of the frame
-	for (int i = 0; i < MAP_WIDTH; i++) {
-		wcout << L"═";
+    Renderer::drawChar(0, 0, 7, L'╔'); // left upper corner of the frame
+	for (int i = 1; i <= MAP_WIDTH; i++) {
+		Renderer::drawChar(i, 0, 7, L'═');
 	}
-	wcout << L"╗" << endl; // right upper corner of the frame
+	Renderer::drawChar(MAP_WIDTH + 1, 0, 7, L'╗'); // right upper corner of the frame
 }
 
 void drawLowerBorder() {
-    wcout << L"╚"; // left lower corner of the frame
-    for (int i = 0; i < MAP_WIDTH; i++) {
-        wcout << L"═"; // lower side of the frame
+    Renderer::drawChar(0, MAP_HEIGHT + 1, 7, L'╚'); // left lower corner of the frame
+    for (int i = 1; i <= MAP_WIDTH; i++) {
+        Renderer::drawChar(i, MAP_HEIGHT + 1, 7, L'═');
     }
-    wcout << L"╝" << endl; // right lower corner of the frame
+    Renderer::drawChar(MAP_WIDTH + 1, MAP_HEIGHT + 1, 7, L'╝'); // right lower corner of the frame
 }
 
-void drawPlayer(int i, int j, bool& drawn, Player& player) {
+void drawLeftBorder() {
+    for (int i = 1; i <= MAP_HEIGHT; i++) {
+        Renderer::drawChar(0, i, 7, L'║');
+    }
+}
+
+void drawRightBorder() {
+    for (int i = 1; i <= MAP_HEIGHT; i++) {
+        Renderer::drawChar(MAP_WIDTH + 1, i, 7, L'║');
+    }
+}
+
+void drawPlayer(Player& player) {
     // draw player
-    if (!drawn && i == static_cast<int>(player.getPosition().getY()) && j == static_cast<int>(player.getPosition().getX())) {
-        setConsoleColor(2); // set green color for player
-        wcout << player.getTexture(); // draw player 
-        setConsoleColor(7); // reset to white color
-        drawn = true;
-    }
+    int x = static_cast<int>(player.getPosition().getX()) + 1;
+    int y = static_cast<int>(player.getPosition().getY()) + 1;
+
+    Renderer::drawChar(x, y, 2, player.getTexture());
 }
 
-void drawPlayerProjectiles(int i, int j, bool& drawn, Player& player) {
+void drawPlayerProjectiles(Player& player) {
     // draw player's projectiles (bullets and rockets) 
-    if (!drawn) {
-        for (auto& projectile : player.getProjectiles()) {
-            if (projectile.isActive() && i == static_cast<int>(projectile.getPosition().getY()) && j == static_cast<int>(projectile.getPosition().getX())) {
-                setConsoleColor(8); // set gray color for projectile
-                if (projectile.getType() == 'b') {
-                    wcout << L"·";
+    for (auto& projectile : player.getProjectiles()) {
+        int x = static_cast<int>(projectile.getPosition().getX()) + 1;
+        int y = static_cast<int>(projectile.getPosition().getY()) + 1;
+
+        if (projectile.isActive()) {          
+
+            if (projectile.getType() == 'b') {
+                Renderer::drawChar(x, y, 8, L'·');
+            }
+            else if (projectile.getType() == 'r') {
+                if (projectile.getDirection() == 'w') {
+                    Renderer::drawChar(x, y, 8, L'▲'); // rocket with up direction
                 }
-                else if (projectile.getType() == 'r') {
-                    if (projectile.getDirection() == 'w') wcout << L"▲"; // rocket with up direction
-                    else if (projectile.getDirection() == 'a') wcout << L"◄"; // rocket with left direction
-                    else if (projectile.getDirection() == 's') wcout << L"▼"; // rocket with down direction
-                    else if (projectile.getDirection() == 'd') wcout << L"►"; // rocket with right direction  
+                else if (projectile.getDirection() == 'a') {
+                    Renderer::drawChar(x, y, 8, L'◄'); // rocket with left direction
                 }
-                setConsoleColor(7); // reset to white color
-                drawn = true;
-                break;
+                else if (projectile.getDirection() == 's') {
+                    Renderer::drawChar(x, y, 8, L'▼'); // rocket with down direction
+                }
+                else if (projectile.getDirection() == 'd') {
+                    Renderer::drawChar(x, y, 8, L'►'); // rocket with right direction  
+                }
             }
         }
     }
 }
 
-void drawEnemies(int i, int j, bool& drawn, vector<Enemy>& enemies) {
+void drawEnemies(vector<Enemy>& enemies) {
     // draw enemies
-    if (!drawn) {
-        for (auto& enemy : enemies) {
-            if (i == static_cast<int>(enemy.getPosition().getY()) && j == static_cast<int>(enemy.getPosition().getX())) {
-                setConsoleColor(enemy.isHit() ? 13 : (enemy.getHP() > 30 ? 4 : 6)); // set red color for enemy if enemy's hp > 30 else set yellow
-                wcout << enemy.getTexture();
-                setConsoleColor(7); // reset to white color
-                drawn = true;
-                break;
-            }
-        }
+    for (auto& enemy : enemies) {
+        int x = static_cast<int>(enemy.getPosition().getX()) + 1;
+        int y = static_cast<int>(enemy.getPosition().getY()) + 1;
+        int color = enemy.isHit() ? 13 : (enemy.getHP() > 30 ? 4 : 6);
+
+        Renderer::drawChar(x, y, color, enemy.getTexture());
     }
 }
 
-void drawEnemyProjectiles(int i, int j, bool& drawn, vector<Enemy>& enemies) {
+void drawEnemyProjectiles(vector<Enemy>& enemies) {
     // draw enemy bullets for each enemy
-    if (!drawn) {
-        for (auto& enemy : enemies) {
-            if (enemy.getBullet().isActive() && i == static_cast<int>(enemy.getBullet().getPosition().getY()) && j == static_cast<int>(enemy.getBullet().getPosition().getX())) { // draw enemy's bullet
-                setConsoleColor(12); // set light red color for rocket
-                wcout << L"·"; // horizontal bullet
-                setConsoleColor(7); // reset to white color
-                drawn = true;
-            }
+    for (auto& enemy : enemies) {
+        if (enemy.getBullet().isActive()) { // draw enemy's bullet
+            int x = static_cast<int>(enemy.getBullet().getPosition().getX()) + 1;
+            int y = static_cast<int>(enemy.getBullet().getPosition().getY()) + 1;
+            
+            Renderer::drawChar(x, y, 12, L'·');
         }
     }
 }
 
-void drawPowerUps(int i, int j, bool& drawn, vector<PowerUp>& powerups) {
+void drawPowerUps(vector<PowerUp>& powerups) {
     // draw powerups
-    if (!drawn) {
-        for (auto& powerup : powerups) {
-            if (!drawn && i == static_cast<int>(powerup.getPosition().getY()) && j == static_cast<int>(powerup.getPosition().getX())) {
-                setConsoleColor(9);  // set blue color for powerup
-                wcout << powerup.getTexture();
-                setConsoleColor(7); // reset to white color
-                drawn = true;
-            }
-        }
+    for (auto& powerup : powerups) {
+        int x = static_cast<int>(powerup.getPosition().getX()) + 1;
+        int y = static_cast<int>(powerup.getPosition().getY()) + 1;
+        
+        Renderer::drawChar(x, y, 9, powerup.getTexture());
     }
 }
 
 void drawMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH>& map, Player& player, vector<Enemy>& enemies, vector<PowerUp>& powerups) {
-    COORD coord = { 0, 0 };
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
+    Renderer::clear();
 
-    setConsoleColor(7);
     drawUpperBorder();
+    drawLowerBorder();
+    drawLeftBorder();
+    drawRightBorder();
 
-	// iterate through every field on the map and draw the appropriate element (player, enemy, bullet, powerup) or empty space
-    for (int i = 0; i < MAP_HEIGHT; i++) {
-        wcout << L"║"; // left side of the frame
+    // priotity:
+    // first display dynamic entities: the player, then their projectiles, then enemies projectiles, then enemies
+    // then display static entities like powerups
 
-        // draw a map row
-        for (int j = 0; j < MAP_WIDTH; j++) {
-            bool drawn = false; // flag to check if the element is drawn on (x, y)
+	drawPlayer(player);
+	drawPlayerProjectiles(player);
+    drawEnemyProjectiles(enemies);
+	drawEnemies(enemies);
+	drawPowerUps(powerups);
 
-			drawPlayer(i, j, drawn, player);
-			drawPlayerProjectiles(i, j, drawn, player);
-			drawEnemies(i, j, drawn, enemies);
-            drawEnemyProjectiles(i, j, drawn, enemies);
-			drawPowerUps(i, j, drawn, powerups);
-         
-            if (!drawn)                
-                wcout << map[j][i];
-        }
-
-        wcout << L"║" << endl; // parts of right side of the frame
-    }
-
-	drawLowerBorder();
-
-    // display player stats
-    setConsoleColor(12);
-    player.info();
+    Renderer::drawString(34, 0, 7, L"═══════════ PLAYER STATUS ═══════════");
+    Renderer::drawString(34, 1, 7, L"Score:");
+    Renderer::drawString(34, 2, 7, L"Enemy kills:");
+    Renderer::drawString(34, 4, 7, L"Health:");
+    Renderer::drawString(34, 6, 7, L"═══════════ AMMUNITION ══════════════");
+    Renderer::drawString(34, 7, 7, L"Bullets:");
+    Renderer::drawString(34, 8, 7, L"Missiles:");
 
     // draw player HP bar
-    for (int i = 0; i < player.getHP() / 10; i++) {
+    /*for (int i = 0; i < player.getHP() / 10; i++) {
         wcout << L"█";
     }
     for (int i = 0; i < 10 - player.getHP() / 10; i++) {
         wcout << L"░";
-    }
+    }*/
 
-    setConsoleColor(8);
+    Renderer::render();
 
     // display messages
 
-    static unsigned int enemy_killed_message_counter {0};
+    /*static unsigned int enemy_killed_message_counter {0};
     if (Data::display_enemy_killed) enemy_killed_message_counter++;
     else if (enemy_killed_message_counter < 10 && enemy_killed_message_counter > 0) {
         if (enemy_killed_message_counter % 2) {
@@ -392,7 +405,7 @@ void drawMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH>& map, Player& player, vec
     else {
         no_rocket_message_counter = 0;
         Data::display_no_rockets = false;
-    }
+    }*/
 }
 
 int main() {
@@ -420,7 +433,7 @@ int main() {
         case '1':
             // map initialization
             if (sound_on)
-                thread(SoundSystem::playMenuSound).detach();
+                SoundSystem::playMenuSound();
 
             for (auto& row : map)
                 row.fill(' ');
@@ -460,7 +473,7 @@ int main() {
                         else {
                             player.shoot('b'); // shoot a bullet
                             if (sound_on)
-                                thread(SoundSystem::playBulletSound).detach();
+                                SoundSystem::playBulletSound();
                         }
                     }
                     if ((key == 'r' || key == 'R')) {
@@ -470,7 +483,7 @@ int main() {
                         else {
                             player.shoot('r'); // shoot a rocket
                             if (sound_on)
-                                thread(SoundSystem::playRocketSound).detach();
+                                SoundSystem::playRocketSound();
                         }
                     }
                     // test only
@@ -494,7 +507,7 @@ int main() {
                     unsigned dmg = checkPlayerProjectileAndEnemyCollision(player, enemy);
                     if (dmg) {
                         if (sound_on)
-                            thread(SoundSystem::playEnemyHitSound).detach();
+                            SoundSystem::playEnemyHitSound();
                         enemy.setIsHit(true);
                         enemy.modifyHealth(-static_cast<int>(dmg));
                         player.modifyScore(10);
@@ -503,7 +516,7 @@ int main() {
                     }
                     if (enemy.getHP() <= 0) {
                         if (sound_on)
-                            thread(SoundSystem::playEnemyKilledSound).detach();
+                            SoundSystem::playEnemyKilledSound();
                         enemy.getBullet().deactivate();
                         player.modifyScore(50);
                         player.kill();
@@ -524,7 +537,7 @@ int main() {
                     if (checkEnemyBulletAndPlayerCollision(player, enemy)) {
                         player.modifyHealth(-20);
                         if (sound_on)
-                            thread(SoundSystem::playerHitSound).detach();
+                            SoundSystem::playerHitSound();
                         enemy.getBullet().deactivate();
                     }
                     if (checkPlayerAndEnemyCollision(player, enemy)) {
@@ -542,7 +555,7 @@ int main() {
                 for (auto it = powerups.begin(); it != powerups.end();) {
                     if (checkPlayerAndPowerUpCollision(player, *it)) {
                         if (sound_on)
-                            thread(SoundSystem::playPowerUpPickedSound).detach();
+                            SoundSystem::playPowerUpPickedSound();
                         if (it->getType() == 0) {
                             player.modifyHealth(20);
                         }
@@ -583,7 +596,8 @@ int main() {
             break;
         case '2':
             // display controls
-            thread(SoundSystem::playMenuSound).detach();
+
+            SoundSystem::playMenuSound();
             while (true) {
                 system("cls");
                 wcout << L"╔════════════════════════╗\n";
@@ -605,8 +619,9 @@ int main() {
             break;
         case '3':
             // display game rules 
+
             if (sound_on)
-                thread(SoundSystem::playMenuSound).detach();
+                SoundSystem::playMenuSound();
             system("cls");
             wcout << L"\n   Goal: Survive as long as you can with infinite\n";
             wcout << L"   enemies coming towards you\n\n";
@@ -654,7 +669,7 @@ int main() {
         case '4':
             // display scorelist read from file
             if (sound_on)
-                thread(SoundSystem::playMenuSound).detach();
+                SoundSystem::playMenuSound();
 
             scorelist = file_manager.readScoreListFromFile();
 
@@ -673,7 +688,7 @@ int main() {
         case '5':
             // display information about the author
             if (sound_on)
-                thread(SoundSystem::playMenuSound).detach();
+                SoundSystem::playMenuSound();
 
             system("cls");
             wcout << "\n\n\n";
@@ -695,7 +710,7 @@ int main() {
         case '6':
             // options
             if (sound_on)
-                thread(&SoundSystem::playMenuSound).detach();
+                SoundSystem::playMenuSound();
             system("cls");
 
             while (true) {
@@ -721,7 +736,7 @@ int main() {
             }
             break;
         case '7':
-            thread(SoundSystem::playMenuSound).detach();
+            SoundSystem::playMenuSound();
             // display quit screen
 
             while (true)
