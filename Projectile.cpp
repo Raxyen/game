@@ -1,26 +1,54 @@
 #include "Projectile.h"
 
+// constructors
 Projectile::Projectile() = default;
+
 Projectile::Projectile(Position p_pos, unsigned int p_damage, float p_speed, bool p_is_enemy, char p_direction, char p_type)
     : pos(p_pos), prevPos(p_pos), damage(p_damage), speed(p_speed), is_enemy(p_is_enemy), direction(p_direction), is_active(true), type(p_type) {}
 
-Position Projectile::getPosition() { return pos; }
-Position Projectile::getPrevPosition() { return prevPos; }
-void Projectile::setPosition(Position pos) { this->pos = pos; }
+// getters and setters
+Position Projectile::getPosition() {
+    return pos;
+}
 
-char Projectile::getDirection() { return direction; }
+Position Projectile::getPrevPosition() {
+    return prevPos;
+}
 
-void Projectile::activate() { is_active = true; }
-void Projectile::deactivate() { is_active = false; }
+void Projectile::setPosition(Position pos) {
+    this->pos = pos;
+}
 
-bool Projectile::isActive() { return is_active; }
-bool Projectile::isEnemy() { return is_enemy; }
+char Projectile::getDirection() {
+    return direction;
+}
 
-unsigned int Projectile::getDamage() { return this->damage; }
+void Projectile::activate() {
+    is_active = true;
+}
 
-char Projectile::getType() { return type; }
+void Projectile::deactivate() {
+    is_active = false;
+}
 
-void Projectile::move() { // moves projectile
+bool Projectile::isActive() {
+    return is_active;
+}
+
+bool Projectile::isEnemy() {
+    return is_enemy;
+}
+
+unsigned int Projectile::getDamage() {
+    return this->damage;
+}
+
+char Projectile::getType() {
+    return type;
+}
+
+// other methods
+void Projectile::move() { // move projectile
     if (this->is_active) {
         // store previous position to allow segment-based collision checks (fixes tunneling)
         prevPos = pos;

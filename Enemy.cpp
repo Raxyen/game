@@ -13,18 +13,45 @@ Enemy::Enemy(char p_direction, Player& player) :
     bullet.deactivate();
 }
 
-Position Enemy::getPosition() { return pos; }
-Bullet& Enemy::getBullet() { return bullet; }
-const Bullet& Enemy::getBullet() const { return bullet; }
-void Enemy::setBullet(Bullet bullet) { this->bullet = bullet; }
-float Enemy::getSpeed() { return speed; }
-int Enemy::getHP() { return hp; }
-wchar_t Enemy::getTexture() { return texture; }
+Position Enemy::getPosition() {
+    return pos;
+}
 
-bool Enemy::isHit() { return is_hit; }
-void Enemy::setIsHit(bool is_hit) { this->is_hit = is_hit; }
+Bullet& Enemy::getBullet() {
+    return bullet;
+}
 
-void Enemy::modifyHealth(int health) { this->hp += health; }
+const Bullet& Enemy::getBullet() const {
+    return bullet;
+}
+
+void Enemy::setBullet(Bullet bullet) {
+    this->bullet = bullet;
+}
+
+float Enemy::getSpeed() {
+    return speed;
+}
+
+int Enemy::getHP() {
+    return hp;
+}
+
+wchar_t Enemy::getTexture() {
+    return texture;
+}
+
+bool Enemy::isHit() {
+    return is_hit;
+}
+
+void Enemy::setIsHit(bool is_hit) {
+    this->is_hit = is_hit;
+}
+
+void Enemy::modifyHealth(int health) {
+    this->hp += health;
+}
 
 void Enemy::move(float dx, float dy) {
     pos.moveX(dx);

@@ -8,6 +8,9 @@ PowerUp::PowerUp(Player& player, int p_type) : type(p_type) {
         case 1:
             texture = L'⌻';
             break;
+        default:
+			texture = L'?';
+			break;
     }
 
     unsigned int x, y;
@@ -18,6 +21,14 @@ PowerUp::PowerUp(Player& player, int p_type) : type(p_type) {
     pos = Position(static_cast<float>(x), static_cast<float>(y));
 }
 
-Position PowerUp::getPosition() { return pos; }
-wchar_t PowerUp::getTexture() { return texture; }
-int PowerUp::getType() { return type; }
+Position PowerUp::getPosition() {
+    return pos;
+}
+
+wchar_t PowerUp::getTexture() {
+    return texture;
+}
+
+int PowerUp::getType() {
+    return type;
+}

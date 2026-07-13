@@ -6,23 +6,23 @@ using namespace std;
 
 Player::Player() { reset(); }
 
-Position Player::getPosition() { 
+Position Player::getPosition() {
     return pos; 
 }
 
-void Player::setPosition(Position pos) { 
+void Player::setPosition(Position pos) {
     this->pos = pos; 
 }
 
-std::vector<Projectile>& Player::getProjectiles() { 
+std::vector<Projectile>& Player::getProjectiles() {
     return projectiles; 
 }
 
-const vector<Projectile>& Player::getProjectiles() const { 
+const vector<Projectile>& Player::getProjectiles() const {
     return projectiles; 
 }
 
-char Player::getDirection() { 
+char Player::getDirection() {
     return direction; 
 }
 
@@ -30,27 +30,27 @@ void Player::setDirection(char direction) {
     this->direction = direction; 
 }
 
-wchar_t Player::getTexture() { 
+wchar_t Player::getTexture() {
     return texture; 
 }
 
-int Player::getHP() { 
+int Player::getHP() {
     return hp; 
 }
 
-unsigned int Player::getScore() const { 
+unsigned int Player::getScore() const {
     return score; 
 }
 
-unsigned int Player::getBulletsCount() const { 
+unsigned int Player::getBulletsCount() const {
     return bullets_count; 
 }
 
-unsigned int Player::getRocketsCount() const { 
+unsigned int Player::getRocketsCount() const {
     return rockets_count; 
 }
 
-void Player::setCauseOfDeath(int cause) { 
+void Player::setCauseOfDeath(int cause) {
     this->cause_of_death = cause; 
 }
 
@@ -58,35 +58,35 @@ void Player::setName(string name) {
     this->name = name; 
 }
 
-string Player::getName() { 
+string Player::getName() {
     return name; 
 }
 
-void Player::modifyHealth(int health) { 
+void Player::modifyHealth(int health) {
     this->hp += health; 
 }
 
-void Player::modifyScore(int score) { 
+void Player::modifyScore(int score) {
     this->score += score; 
 }
 
-void Player::modifyBulletsCount(int bullets_count) { 
+void Player::modifyBulletsCount(int bullets_count) {
     this->bullets_count += bullets_count; 
 }
 
-void Player::modifyRocketsCount(int rockets_count) { 
+void Player::modifyRocketsCount(int rockets_count) {
     this->rockets_count += rockets_count; 
 }
 
-void Player::modifyRocketsFired(int rockets_fired) { 
+void Player::modifyRocketsFired(int rockets_fired) {
     this->rockets_fired += rockets_fired; 
 }
 
-void Player::kill() { 
+void Player::kill() {
     kills++; 
 }
 
-void Player::normalizeHP() { 
+void Player::normalizeHP() {
     if (hp > 100) {
         hp = 100;
     }
