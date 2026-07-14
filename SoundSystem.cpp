@@ -31,7 +31,7 @@ void SoundSystem::playEnemyKilledSound() {
 }
 
 void SoundSystem::playBulletSound() {
-    thread([] { Beep(1000, 30); }).detach();
+    thread([] { Beep(1500, 30); }).detach();
 }
 
 void SoundSystem::playRocketSound() {

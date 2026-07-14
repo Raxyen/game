@@ -40,6 +40,7 @@ public:
 
     int getHP();
 
+    unsigned int getKills() const;
     unsigned int getScore() const;
 
     unsigned int getBulletsCount() const;

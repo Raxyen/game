@@ -12,6 +12,7 @@
 #include <io.h>
 #include <fcntl.h>
 #include <string>
+#include <sstream>
 
 #include "Position.h"
 #include "Projectile.h"
@@ -303,6 +304,25 @@ void drawPowerUps(vector<PowerUp>& powerups) {
     }
 }
 
+void drawMessage(bool& condition, int color, const std::wstring& message, unsigned int& counter) {
+    if (condition) {
+		counter = 1;         // Start frame counting for message display
+        condition = false;   // Disable the global flag so the counting happens only once
+    }
+
+    if (counter > 0 && counter < 10) {
+        // Message blinking: draw message only in odd frames (1, 3, 5, 7, 9)
+        // In even frames we do nothing – Renderer::clear() will take care of "disappearing" the text!
+        if (counter % 2 != 0) {
+            Renderer::drawString(34, 12, color, message);
+        }
+        counter++;
+    }
+    else {
+		counter = 0; // message display finished, reset counter
+    }
+}
+
 void drawMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH>& map, Player& player, vector<Enemy>& enemies, vector<PowerUp>& powerups) {
     Renderer::clear();
 
@@ -315,97 +335,54 @@ void drawMap(array<array<char, MAP_HEIGHT>, MAP_WIDTH>& map, Player& player, vec
     // first display dynamic entities: the player, then their projectiles, then enemies projectiles, then enemies
     // then display static entities like powerups
 
-	drawPlayer(player);
-	drawPlayerProjectiles(player);
+    drawPlayer(player);
+    drawPlayerProjectiles(player);
     drawEnemyProjectiles(enemies);
-	drawEnemies(enemies);
-	drawPowerUps(powerups);
+    drawEnemies(enemies);
+    drawPowerUps(powerups);
 
-    Renderer::drawString(34, 0, 7, L"═══════════ PLAYER STATUS ═══════════");
-    Renderer::drawString(34, 1, 7, L"Score:");
-    Renderer::drawString(34, 2, 7, L"Enemy kills:");
-    Renderer::drawString(34, 4, 7, L"Health:");
-    Renderer::drawString(34, 6, 7, L"═══════════ AMMUNITION ══════════════");
-    Renderer::drawString(34, 7, 7, L"Bullets:");
-    Renderer::drawString(34, 8, 7, L"Missiles:");
+    Renderer::drawString(34, 0, 6, L"═══════════ PLAYER STATUS ═══════════");
+    std::wstringstream ssScore;
+    ssScore << L"Score:          " << std::setw(6) << std::setfill(L'0') << player.getScore();
+    Renderer::drawString(34, 1, 7, ssScore.str());
+    Renderer::drawString(34, 2, 11, L"Enemy kills:");
+    Renderer::drawString(50, 2, 8, std::to_wstring(player.getKills()));
+    Renderer::drawString(34, 4, 11, L"Health: ");
+    Renderer::drawString(34, 6, 6, L"═══════════ AMMUNITION ══════════════");
+    Renderer::drawString(34, 7, 11, L"Bullets:");
+    Renderer::drawString(50, 7, 8, std::to_wstring(player.getBulletsCount()));
+    Renderer::drawString(34, 8, 11, L"Missiles:");
+    Renderer::drawString(50, 8, 8, std::to_wstring(player.getRocketsCount()));
+    Renderer::drawString(34, 10, 6, L"═══════════ INFO ════════════════");
 
-    // draw player HP bar
-    /*for (int i = 0; i < player.getHP() / 10; i++) {
-        wcout << L"█";
+
+    // draw hp bar
+    Renderer::drawChar(50, 4, 8, L'[');
+    for (int i = 0; i < 10; i++) {
+        if (i <= static_cast<int>(player.getHP() / 10))
+            Renderer::drawChar(51 + i, 4, 12, L'█');
+        else {
+            Renderer::drawChar(51 + i, 4, 12, L'░');
+        }
     }
-    for (int i = 0; i < 10 - player.getHP() / 10; i++) {
-        wcout << L"░";
-    }*/
+    Renderer::drawChar(61, 4, 8, L']');
 
-    Renderer::render();
+    static unsigned int killed_counter = 0;
+    static unsigned int bullets_counter = 0;
+    static unsigned int rockets_counter = 0;
+	static unsigned int powerup_counter = 0;
+	static unsigned int hurt_counter = 0;
+
+    bool is_hurt = player.getHP() <= 30;
 
     // display messages
+    drawMessage(Data::display_enemy_killed, 3, Data::message1, killed_counter);
+    drawMessage(Data::powerup_and_player_collision, 3, Data::message2, powerup_counter);
+    drawMessage(is_hurt, 12, Data::message3, hurt_counter);
+    drawMessage(Data::display_no_bullets, 3, Data::message4, bullets_counter);
+    drawMessage(Data::display_no_rockets, 3, Data::message5, rockets_counter);
 
-    /*static unsigned int enemy_killed_message_counter {0};
-    if (Data::display_enemy_killed) enemy_killed_message_counter++;
-    else if (enemy_killed_message_counter < 10 && enemy_killed_message_counter > 0) {
-        if (enemy_killed_message_counter % 2) {
-            setConsoleColor(4);
-            wcout << Data::message1;
-            setConsoleColor(7);
-            enemy_killed_message_counter++;
-        }
-        else enemy_killed_message_counter++;
-    }
-    else enemy_killed_message_counter = 0;
-
-    static unsigned int power_up_collected_message_counter {0};
-    if (Data::powerup_and_player_collision) power_up_collected_message_counter++;
-    else if (power_up_collected_message_counter < 10 && power_up_collected_message_counter > 0) {
-        if (power_up_collected_message_counter % 2) {
-            setConsoleColor(3);
-            wcout << Data::message2;
-            setConsoleColor(7);
-            power_up_collected_message_counter++;
-        }
-        else power_up_collected_message_counter++;
-    }
-    else power_up_collected_message_counter = 0;
-
-    static unsigned int player_low_hp_message_counter = 0;
-    if (player.getHP() <= 20) {
-        if (player_low_hp_message_counter % 2) {
-            setConsoleColor(12);
-            wcout << Data::message3;
-            setConsoleColor(7);
-            player_low_hp_message_counter++;
-        }
-        else player_low_hp_message_counter++;
-    }
-    else player_low_hp_message_counter = 0;
-
-    static unsigned int no_bullets_message_counter = 0;
-    if (Data::display_no_bullets) no_bullets_message_counter++;
-    else if (no_bullets_message_counter < 20 && no_bullets_message_counter > 0) {
-        setConsoleColor(3);
-        wcout << Data::message4;
-        setConsoleColor(7);
-        no_bullets_message_counter++;
-    }
-    else {
-        no_bullets_message_counter = 0;
-        Data::display_no_bullets = false;
-    }
-
-    static unsigned int no_rocket_message_counter = 0;
-    if (Data::display_no_rockets) {
-        no_rocket_message_counter++;
-    }
-    else if (no_rocket_message_counter < 20 && no_rocket_message_counter > 0) {
-        setConsoleColor(3);
-        wcout << Data::message5;
-        setConsoleColor(7);
-        no_rocket_message_counter++;
-    }
-    else {
-        no_rocket_message_counter = 0;
-        Data::display_no_rockets = false;
-    }*/
+    Renderer::render();
 }
 
 int main() {
@@ -431,7 +408,7 @@ int main() {
         menu_option = _getch();
         switch (menu_option) {
         case '1':
-            // map initialization
+            // game
             if (sound_on)
                 SoundSystem::playMenuSound();
 
@@ -447,6 +424,8 @@ int main() {
             Data::powerup_spawn_condition = false;
 
             spawnEnemies(player, enemies, 4);
+
+            // game loop
             while (true) {
                 if (_kbhit()) { // reading pressed keys
                     key = _getch();

@@ -38,6 +38,10 @@ int Player::getHP() {
     return hp; 
 }
 
+unsigned int Player::getKills() const {
+    return kills;
+}
+
 unsigned int Player::getScore() const {
     return score; 
 }
